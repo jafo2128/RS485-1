@@ -1,0 +1,11 @@
+*.o
+*.err
+*.conf
+*.cof
+*.hex
+*.map
+*.mcp
+*.mcs
+*.mcw
+*.mptags
+*.tagsrc

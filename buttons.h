@@ -1,7 +1,8 @@
 #ifndef BUTTONS
 #define BUTTONS
 
-#include <p18f26k22.h>
+#include <p18f25k22.h>
+
 #include "display.h"
 
 //Public function declaration

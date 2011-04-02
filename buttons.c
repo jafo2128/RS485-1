@@ -25,7 +25,8 @@ void buttons_init() {
 	display_init();
 	
 	//RC2, RC3 as input.
-	TRISC|= 0b00110000;
+	TRISC|= 0b000001100;
+	ANSELC&= 0b11110011;
 	
 	cnt1= cnt2 = 0;
 	
@@ -49,7 +50,7 @@ void buttons_loop() {
 			btn.button1^= 1;
 			//falling edge and only 1 button
 			if (btn.button1 == (unsigned)0 && btn.button2 == (unsigned)0 && cnt2 == 0) {
-				display_inc();
+				display_dec();
 			} else if (btn.button1 == (unsigned)1 && btn.button2 == (unsigned)1) {
 				display_unlock();
 			}
@@ -61,7 +62,7 @@ void buttons_loop() {
 			btn.button2^= 1;
 			//falling edge and only 1 button
 			if (btn.button2 == (unsigned)0 && btn.button1 == (unsigned)0 && cnt1 == 0) {
-				display_dec();
+				display_inc();
 			} else if (btn.button1 == (unsigned)1 && btn.button2 == (unsigned)1) {
 				display_unlock();
 			}

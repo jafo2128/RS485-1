@@ -1,7 +1,7 @@
 #ifndef DISP
 #define DISP
 
-#include <p18f26k22.h>
+#include <p18f25k22.h>
 
 //Public function declaration
 

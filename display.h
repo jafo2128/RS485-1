@@ -2,16 +2,17 @@
 #define DISP
 
 #include <p18f25k22.h>
+#include "hdlc.h"
 
 //Public function declaration
 
 //Init
 void display_init(void);
 
-//Reset idle timer
-void display_idleReset(void);
+//Display current value
+void display_on(void);
 
-//Lock & Unlock display
+//Lock & Unlock change of value and display on/off
 void display_lock(void);
 void display_unlock(void);
 

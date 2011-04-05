@@ -1,5 +1,7 @@
 #include "hdlc.h"
 
+#define  BUFFER_SIZE     8
+
 const unsigned char DLE= 0x10;
 const unsigned char STX= 0x02;
 const unsigned char ETX= 0x03;
@@ -19,16 +21,19 @@ typedef union {
 } bits;		
 
 
-//Receiving charter
+//Receiving charters
 bits control;
 unsigned int current_size, received_size, cnt;
 unsigned char address;
-unsigned char receiving_data[7];
-unsigned char received_data[7];
-unsigned char send_data[6];
+unsigned char receiving_data[BUFFER_SIZE];
+unsigned char received_data[BUFFER_SIZE];
 
-//HDLC
-char counter_slave, counter_master;
+//HDLC transmit/receive data
+unsigned char send_sequence_number, receive_sequence_number; //3bit used!! Count to 7, 8 => 0!
+
+//HDLC transmit list
+unsigned char transmit_data[BUFFER_SIZE];
+char head, tail;
 
 void hdlc_init() {
 	//Read address in EEPROM.
@@ -37,10 +42,18 @@ void hdlc_init() {
 	EECON1bits.CFGS= 0;  //Acces EEPROM memory
 	EECON1bits.RD= 1; //Read byte, auto cleared!
 	address= EEDATA;  //Save EEPROM in address
-	if (address > 32) {address= 0;}
+	if (address > (unsigned)32) {address= 0;} //Valid address?
 	
 	control.byte= 0;
-	current_size= 0;
+	current_size= received_size= 0;
+	head= tail= 0;
+	
+	//Set up UART
+	TXSTA1bits.TX9= 0; //8bit transmission
+	TXSTA1bits.SYNC= 0; //Asynchronous mode
+	RCSTA1bits.RX9= 0; //8bit receiving
+	RCSTA1bits.SPEN= 1; //Enable UART
+	//BAUDCON1= ;	
 }
 
 char hdlc_getAddress() {
@@ -63,35 +76,76 @@ void hdlc_setAddress(char new_address) {
 	EECON1bits.WREN= 0; //disable write to EEPROM
 }	
 
+void hdlc_send(unsigned char data) {
+
+	if (tail >= BUFFER_SIZE-1) { //Set data in transmission buffer
+		transmit_data[0]= data;	
+		tail= 0;
+	} else {
+		transmit_data[tail+1]= data;
+		tail++;
+	}
+		
+	if (data == DLE) {
+		if (tail >= BUFFER_SIZE-1) { //Set DLE in transmission buffer
+			transmit_data[0]= data;	
+			tail= 0;
+		} else {
+			transmit_data[tail+1]= data;
+			tail++;
+		}
+	}	
+}	
 
 void hdlc_removeDLEs() {
 	
 }	
 
 void hdlc_checkData() {
-	if (received_data[0] == address) { //For this slave?
-		
-		if (control.NRM == (unsigned)0) { //Waiting on connection setup
-			if (received_data[1]&0xC0 == 0xC0) { //Unnumbered Frame
-				if (received_data[1]&0x37 == 0x01) { //Set normal response mode
-					counter_slave= counter_master= 0;
-					control.NRM= (unsigned)1;
-					if (received_data[1]&0x08 == 0x08) { //Check poll flag
-						// Send Unnumbered acknowledge
-					}		
+	if (received_data[0] == address) { //For this slave? Otherwise do nothing
+		if (control.NRM == 0u) { //Waiting on connection setup
+			if (received_data[1]&0xC0 == 0xC0 && received_data[1]&0x37 == 0x01) { //Unnumbered Frame, set normal response mode
+				receive_sequence_number= send_sequence_number= 0; //init sequence numbers to zero
+				control.NRM= 1u; //Now we are in Normal Response Mode
+				if (received_data[1]&0x08 == 0x08) { //Check poll flag
+					// Send Unnumbered acknowledge
 				}
+			} else if (received_data[1]&0xC0 == 0xC0 && received_data[1]&0x37 == 0x02) { //Unnumbered Frame, disconnect
+				control.NRM= 0u;
+				if (received_data[1]&0x08 == 0x08) { //Check poll flag
+					//Send Unnumbered acknowledge
+					hdlc_send(address);
+					hdlc_send(0b11001110);
+					hdlc_send(0); //FCS!!
+					hdlc_send(0);
+				}
+			} else if (received_data[1]&0x08 == 0x08) {
+				//Send DM: disconnect mode
 			}
-		} else {
-		
-			//Check type frame	
-			if (received_data[1]&0x80 == 0x00) { //Information Frame
+		} else { //A connection is alive
+			//Check frame type's
+			if (received_data[1]&0x80 == 0x00u) { //Information Frame
+				if (receive_sequence_number == received_data[1]&0x03 ) { //Testing sequence numbers from master.
+					receive_sequence_number++; //increment sequence number.
+					receive_sequence_number%= 3;
+				}
 				
+
+				//Normaly not used here, so send ack
+				if (received_data[1]&0x08 == 0x08) {
+					// Send ack
+				}	
 			} else if (received_data[1]&0xC0 == 0x80) { //Supervisory Frame
+				if (receive_sequence_number == received_data[1]&0x03 ) { //Testing sequence numbers from master.
+					receive_sequence_number++; //increment sequence number.
+					receive_sequence_number%= 3;
+				}
+			
 				//Supervisory Code
-				if (received_data[1]&0x60 == 0x00) { //Receive Ready
-					
+				if (received_data[1]&0x60 == 0x00) { //Receive Ready, used to poll for data
+					//Send data or send RR when no data
 				} else if (received_data[1]&0x60 == 0x10) { //Reject
-				
+					//Data not correct received by master, resend! 
 				} else if (received_data[1]&0x60 == 0x20) { //Receive Not Ready
 				
 				} else if (received_data[1]&0x60 == 0x30) { //Selective reject
@@ -100,10 +154,14 @@ void hdlc_checkData() {
 			
 			} else if (received_data[1]&0xC0 == 0xC0) { //Unnumbered Frame
 				if (received_data[1]&0x37 == 0x01) { //Set normal response mode
-					
-				} else if (received_data[1]&0x37 == 0x02) { //Disconnect
+					receive_sequence_number= send_sequence_number= 0;
+					control.NRM= 1u;
 					if (received_data[1]&0x08 == 0x08) { //Check poll flag
-						control.NRM= (unsigned)0;
+						// Send Unnumbered acknowledge
+					}
+				} else if (received_data[1]&0x37 == 0x02) { //Disconnect
+					control.NRM= 0u;
+					if (received_data[1]&0x08 == 0x08) { //Check poll flag
 						// Send Unnumbered acknowledge
 					}
 				} else if (received_data[1]&0x37 == 0x0C) { //Unnumbered acknowledge
@@ -117,19 +175,19 @@ void hdlc_checkData() {
 
 void hdlc_read(unsigned char input) {
 	//Drop data => to many packets!
-	if (current_size >= (unsigned)6) {
-		control.SFD= (unsigned)0;
-		control.DLE= (unsigned)0;
+	if (current_size >= (unsigned)(BUFFER_SIZE-1)) {
+		control.SFD= 0u;
+		control.DLE= 0u;
 	}
 	
 	//Waiting on Start of frame: DLE & STX
-	if (control.SFD == (unsigned)0) {
-		if (input == DLE) {control.DLE == (unsigned)1;} //DLE found => next STX!
+	if (control.SFD == 0u) {
+		if (input == DLE) {control.DLE == 1u;} //DLE found => next STX!
 		else if (control.DLE && input == STX) { //Start of frame found!
-			control.SFD= (unsigned)1;
-			control.DLE= (unsigned)0;
-			current_size= (unsigned)0;
-		} else {control.DLE= (unsigned)0;} //Not valid charter
+			control.SFD= 1u;
+			control.DLE= 0u;
+			current_size= 0u;
+		} else {control.DLE= 0u;} //Not valid charter
 	} else {
 		//Save al charters for CRC and handeling of commands
 		receiving_data[current_size++]= input;
@@ -137,10 +195,10 @@ void hdlc_read(unsigned char input) {
 		//Testing for invalid start of frame
 		if (input == DLE) {control.DLE!= control.DLE;}
 		else if (control.DLE && input == STX) { //Reset was invalid start of frame!
-			current_size= (unsigned)0;
-			control.DLE= (unsigned)0;
+			current_size= 0u;
+			control.DLE= 0u;
 		} else if (control.DLE && input == ETX) { //End of frame found :):)
-			control.SFD= (unsigned)0; //We have to resync
+			control.SFD= 0u; //We have to resync
 			received_size= current_size;
 			received_data[0]= receiving_data[0];
 			received_data[1]= receiving_data[1];
@@ -153,14 +211,14 @@ void hdlc_read(unsigned char input) {
 				hdlc_removeDLEs;
 				hdlc_checkData;
 			} else {
-				//Send S-Frame, REJ
+				//Send S-Frame if address is correct, REJ
 			}
 		} else {
-			control.DLE= (unsigned)0;
+			control.DLE= 0u;
 		}
 	}
 }
 
 char hdlc_write(void) {
 	
-}	
+}

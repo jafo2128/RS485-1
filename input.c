@@ -38,7 +38,7 @@ void input_init() {
 	
 	//Set default values
 	input.btn_dec= input.btn_inc= input.btn_ignore= 0;
-	cnt1= cnt2= delay_off= 0;
+	cnt1= cnt2= delay_off= delay_unlock= 0;
 	capt1= 0;
 	
 }
@@ -46,15 +46,16 @@ void input_init() {
 void input_loop() {
 	
 	//Button decrement
-	if ( input.btn_dec == (unsigned)0 && PORTCbits.RC2 == (unsigned)1 && cnt1 == (unsigned)0) {
+	if ( input.btn_dec == 0u && PORTCbits.RC2 == 0u && cnt1 == 0u) {
 		cnt1= 100;
-		input.btn_dec= (unsigned)1;
+		delay_unlock= 0;
+		input.btn_dec= 0u;
 		display_on();
-	} else 	if (input.btn_dec == (unsigned)1 && PORTCbits.RC2 == (unsigned)0 && cnt1 == (unsigned)0) {
+	} else 	if (input.btn_dec == 0u && PORTCbits.RC2 == 0u && cnt1 == 0u) {
 		cnt1= 100;
-		input.btn_dec= (unsigned)0;
+		input.btn_dec= 0u;
 		
-		if (input.btn_inc == (unsigned)0) {
+		if (input.btn_inc == 0u) {
 			if (!input.btn_ignore) {
 				display_dec();
 			}
@@ -64,15 +65,16 @@ void input_loop() {
 		}
 	}
 	//Button increment
-	if ( input.btn_inc == (unsigned)0 && PORTCbits.RC3 == (unsigned)1 && cnt2 == (unsigned)0) {
+	if ( input.btn_inc == 0u && PORTCbits.RC3 == 0u && cnt2 == 0u) {
 		cnt2= 100;
-		input.btn_inc= (unsigned)1;
+		delay_unlock= 0;
+		input.btn_inc= 0u;
 		display_on();
-	} else if (input.btn_inc == (unsigned)1 && PORTCbits.RC3 == (unsigned)0 && cnt2 == (unsigned)0) {
+	} else if (input.btn_inc == 0u && PORTCbits.RC3 == 0u && cnt2 == 0u) {
 		cnt2= 100;
-		input.btn_inc= (unsigned)0;
+		input.btn_inc= 0u;
 		
-		if (input.btn_dec == (unsigned)0) {
+		if (input.btn_dec == 0u) {
 			if (!input.btn_ignore) {
 				display_inc();
 			}
@@ -82,47 +84,49 @@ void input_loop() {
 		}
 	} 
 	//Input capture
-	if ( input.capt1 == (unsigned)0 && PORTBbits.RB0 == (unsigned)1 && cnt3 == (unsigned)0) {
+	if ( input.capt1 == 0u && PORTBbits.RB0 == 0u && cnt3 == 0u) {
 		cnt3= 100;
-		input.capt1= (unsigned)1;
-	} else if (input.capt1 == (unsigned)1 && PORTBbits.RB0 == (unsigned)0 && cnt3 == (unsigned)0) {
+		input.capt1= 0u;
+	} else if (input.capt1 == 0u && PORTBbits.RB0 == 0u && cnt3 == 0u) {
 		cnt3= 100;
-		input.capt1= (unsigned)0;
+		input.capt1= 0u;
 		capt1++;					
 	}
 	//both switches pressed
-	if (PORTCbits.RC2 == (unsigned)1 && PORTCbits.RC3 == (unsigned)1 && cnt1 == (unsigned)0 && cnt2 == (unsigned)0) {
-		if (cnt1 != (unsigned)0 || cnt2 != (unsigned)0 ) {
-			delay_unlock= 2000;
-		}
-		delay_unlock--;
-		if (delay_unlock == (unsigned)0) {
+	if (PORTCbits.RC2 == 0u && PORTCbits.RC3 == 0u && cnt1 == 0u && cnt2 == 0u && delay_unlock == 0u) {
+		delay_unlock= 2000;
+	}
+	
+	//Unlock up/down counting.
+	if (delay_unlock == 0u) {
 			display_unlock();
-		}
 	}
 	
 	//Display on
-	if ( PORTCbits.RC2 == (unsigned)1 || PORTCbits.RC3 == (unsigned)1) {
+	if ( PORTCbits.RC2 == 1u || PORTCbits.RC3 == 1u) {
 		delay_off= 3000;	
 	}
 	
 	//Display off
-	if ( delay_off == 0 ) {
+	if ( delay_off == 0u ) {
 		display_lock();
 	}	
 }
 
 void input_cnt_int() {
-	if (cnt1 != (unsigned)0) {
+	if (cnt1 != 0u) {
 		cnt1--;
 	}
 	
-	if (cnt2 != (unsigned)0) {
+	if (cnt2 != 0u) {
 		cnt2--;	
 	}
 	
-	if (delay_off != (unsigned)0) {
+	if (delay_off != 0u) {
 		delay_off--;
 	}
+	
+	if (delay_unlock != 0u) {
+		delay_unlock--;	
+	}	
 }
-		

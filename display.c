@@ -25,7 +25,7 @@ void display_init() {
 void display_show(char disp_value) {
 	char buffer[4];	
 	
-	if (disp_value != 0x0ff) {
+	if (disp_value != (signed)0xff) {
 		//convert to ASCII and convert to binary
 		btoa(disp_value,buffer);
 		if (buffer[1] >= 0x30 && buffer[1]  <= 0x39) {//Valid ASCII charter: 0-9

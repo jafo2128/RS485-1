@@ -14,7 +14,9 @@
 #include "input.h"
 #include "display.h"
 #include "hdlc.h"
+#include "CRC16.h"
 
+char CRC[8];
 
 void InterruptHandlerHigh (void);
 void InterruptHandlerLow (void);
@@ -35,7 +37,7 @@ void main (void)
 	
 	//Init library's
 	input_init();
-	hdlc_init();
+	//hdlc_init();
 	display_init(); //After hdlc_init, otherwise wrong address. Maybe working with poiters??
 	
 	//Enable global interrupts: High priority: 0008h, Low priority: 0018h
@@ -43,7 +45,18 @@ void main (void)
 	INTCONbits.PEIE= 1;
 	INTCONbits.GIE= 1;
 	
-	//Main loop
+	//Testing CRC-16-CITT
+	CRC[0]= 0x12;
+	CRC[1]= 0x34;
+	CRC[2]= 0x56;
+	CRC[3]= 0x78;
+	// http://www.lammertbies.nl/comm/info/crc-calculation.html
+	/*if (crc16_calc(&CRC, 4) == 0x9015) {
+		//Valid CRC
+		display_show(1);
+	}*/	
+	
+	//Main loop	
 	while (1) {
 		input_loop();
 	}	

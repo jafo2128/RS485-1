@@ -207,7 +207,7 @@ void hdlc_read(unsigned char input) {
 			received_data[4]= receiving_data[4];
 			received_data[5]= receiving_data[5];
 			received_data[6]= receiving_data[6];
-			if (crc16_calc(received_data, received_size)) {
+			if (*(&received_data[received_size-1]) == crc16_calc(received_data, received_size-2)) {
 				hdlc_removeDLEs;
 				hdlc_checkData;
 			} else {

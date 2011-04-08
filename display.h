@@ -12,6 +12,9 @@ void display_init(void);
 //Display current value
 void display_on(void);
 
+//Display a value
+void display_show(char disp_value);
+
 //Lock & Unlock change of value and display on/off
 void display_lock(void);
 void display_unlock(void);

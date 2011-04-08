@@ -5,14 +5,7 @@
 unsigned int crc, i, j, tmp1, tmp2, bits;
 char valid;
 
-char crc16_calc (unsigned char data[], unsigned int size) {
-
-	//save current CRC
-	//crc= (((int)data[1])<<8) | (int)data[4];
-	crc= *(&data[1]);
-
-	//data only
-	size-= 2;
+int crc16_calc (unsigned char data[], unsigned int size) {
 	//number of bits
 	bits= size*8-16;
 	
@@ -55,5 +48,5 @@ char crc16_calc (unsigned char data[], unsigned int size) {
 		valid= 0x00;
 	}
 	
-	return valid;
+	return *(&data[0]);
 }	

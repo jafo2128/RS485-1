@@ -44,16 +44,45 @@ void hdlc_init() {
 	address= EEDATA;  //Save EEPROM in address
 	if (address > (unsigned)32) {address= 0;} //Valid address?
 	
-	control.byte= 0;
+	control.byte= 0u;
 	current_size= received_size= 0;
 	head= tail= 0;
 	
+	//Set up Tx & Rx pins
+	TRISC|= 0xC0;
+	
+	//Set up Receive/Transmit select pins, as output
+	TRISC&= 0b11001111;
+	
+	//Enable UART interrupts
+	//PIE1bits.RC1IE= 1;
+	
 	//Set up UART
+	BAUDCON1bits.BRG16= 0; //Timer in 8 bit mode
+	SPBRG1= 0x19;// =25 => 9600 boud.
 	TXSTA1bits.TX9= 0; //8bit transmission
 	TXSTA1bits.SYNC= 0; //Asynchronous mode
+	TXSTA1bits.BRGH= 0; //Timer in 8 bit mode
+	TXSTA1bits.TXEN= 1; //Transmit enable
 	RCSTA1bits.RX9= 0; //8bit receiving
+	RCSTA1bits.CREN= 0; //Continuous receive enable bit
 	RCSTA1bits.SPEN= 1; //Enable UART
-	//BAUDCON1= ;	
+	
+	
+	/*//Test transmission
+	PORTC|= 0x30; //Transmit enable, receive disable
+	while (1 == 1) {
+		while (TXSTA1bits.TRMT == 0u);
+			TXREG1= 'T';
+		while (TXSTA1bits.TRMT == 0u);
+			TXREG1= 'x';	
+		while (TXSTA1bits.TRMT == 0u);
+			TXREG1= '\r';
+		while (TXSTA1bits.TRMT == 0u);
+			TXREG1= '\n';
+	}	
+	PORTC&= 0xCF; //Disable receive/transmit
+	*/
 }
 
 char hdlc_getAddress() {
@@ -74,6 +103,16 @@ void hdlc_setAddress(char new_address) {
 	EECON1bits.WR= 1; //Write data
 	INTCONbits.GIE= 1; //Re-enable global interrupts
 	EECON1bits.WREN= 0; //disable write to EEPROM
+}
+
+void hdlc_send() {
+	if (TXSTA1bits.TRMT == 1u) { //If transmit buffer empty
+		TXREG1= transmit_data[head];
+		head++;
+		if (head >= BUFFER_SIZE-1) {
+			head= 0;	
+		}
+	}
 }	
 
 void hdlc_send(unsigned char data) {
@@ -189,17 +228,17 @@ void hdlc_read(unsigned char input) {
 			current_size= 0u;
 		} else {control.DLE= 0u;} //Not valid charter
 	} else {
-		//Save al charters for CRC and handeling of commands
+		//Save all charters for CRC and handeling of commands
 		receiving_data[current_size++]= input;
 		
 		//Testing for invalid start of frame
-		if (input == DLE) {control.DLE!= control.DLE;}
+		if (input == DLE) {control.DLE= !control.DLE;}
 		else if (control.DLE && input == STX) { //Reset was invalid start of frame!
 			current_size= 0u;
 			control.DLE= 0u;
 		} else if (control.DLE && input == ETX) { //End of frame found :):)
 			control.SFD= 0u; //We have to resync
-			received_size= current_size;
+			received_size= current_size-2;
 			received_data[0]= receiving_data[0];
 			received_data[1]= receiving_data[1];
 			received_data[2]= receiving_data[2];
@@ -207,11 +246,12 @@ void hdlc_read(unsigned char input) {
 			received_data[4]= receiving_data[4];
 			received_data[5]= receiving_data[5];
 			received_data[6]= receiving_data[6];
-			if (*(&received_data[received_size-1]) == crc16_calc(received_data, received_size-2)) {
+			received_data[7]= receiving_data[7];
+			if (*(&received_data[received_size-1]) == crc16_calc(received_data, received_size)) {
 				hdlc_removeDLEs;
 				hdlc_checkData;
 			} else {
-				//Send S-Frame if address is correct, REJ
+				//Send S-Frame if address is correct, wrong CRC, and P bit=1 => REJ
 			}
 		} else {
 			control.DLE= 0u;

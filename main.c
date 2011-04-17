@@ -37,7 +37,7 @@ void main (void)
 	
 	//Init library's
 	input_init();
-	//hdlc_init();
+	hdlc_init();
 	display_init(); //After hdlc_init, otherwise wrong address. Maybe working with poiters??
 	
 	//Enable global interrupts: High priority: 0008h, Low priority: 0018h
@@ -59,6 +59,10 @@ void main (void)
 	//Main loop	
 	while (1) {
 		input_loop();
+		while (PIR1bits.RC1IF) {
+			hdlc_read(RCREG1);
+		}
+		hdlc_send();
 	}	
 }
 
@@ -84,6 +88,12 @@ void InterruptHandlerHigh () {
 			PIR1bits.TMR2IF= 0;            //clear interrupt flag
 			input_cnt_int();
 	}
+	
+	/*if (PIR1bits.RC1IF) { //check for UART1 receive
+		while (PIR1bits.RC1IF) {
+			hdlc_read(RCREG1);
+		}
+	}*/	
 }
 
 //----------------------------------------------------------------------------
@@ -106,10 +116,7 @@ void InterruptVectorLow (void) {
 #pragma interrupt InterruptHandlerHigh
 
 void InterruptHandlerLow () {
-	if (PIR1bits.TMR2IF) { //check for TMR2 match                                   
-			PIR1bits.TMR2IF= 0;            //clear interrupt flag
-			input_cnt_int();
-	}
+
 }
 
 //----------------------------------------------------------------------------

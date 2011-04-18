@@ -16,6 +16,6 @@ void hdlc_setAddress(char new_address);
 
 //Read and Write data from UART
 void hdlc_receive(unsigned char input); //Read data from UART
-void hdlc_send(); //Write data to UART
+void hdlc_transmit(void); //Write data to UART
 
 #endif

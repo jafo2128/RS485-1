@@ -60,9 +60,9 @@ void main (void)
 	while (1) {
 		input_loop();
 		while (PIR1bits.RC1IF) {
-			hdlc_read(RCREG1);
+			hdlc_receive(RCREG1);
 		}
-		hdlc_send();
+		hdlc_transmit();
 	}	
 }
 

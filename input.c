@@ -21,7 +21,7 @@ typedef union {
 		unsigned bit6 :1;
 		unsigned bit7 :1;
 	};
-} bits;		
+} bits;
 
 bits input;
 
@@ -40,7 +40,6 @@ void input_init() {
 	input.btn_dec= input.btn_inc= input.btn_ignore= 0;
 	cnt1= cnt2= delay_off= delay_unlock= 0;
 	capt1= 0;
-	
 }
 
 void input_loop() {
@@ -60,7 +59,7 @@ void input_loop() {
 				display_dec();
 			}
 			input.btn_ignore= 0u;
-		} else {;
+		} else {
 			input.btn_ignore= 1u;
 		}
 	}
@@ -80,9 +79,9 @@ void input_loop() {
 			}
 			input.btn_ignore= 0u;
 		} else {
-			input.btn_ignore= 1u;		
+			input.btn_ignore= 1u;
 		}
-	} 
+	}
 	//Input capture
 	if ( input.capt1 == 0u && PORTBbits.RB0 == 1u && cnt3 == 0u) {
 		cnt3= 100;
@@ -108,13 +107,13 @@ void input_loop() {
 	
 	//Display on
 	if ( PORTCbits.RC2 == 1u || PORTCbits.RC3 == 1u) {
-		delay_off= 3000;	
+		delay_off= 3000;
 	}
 	
 	//Display off
 	if ( delay_off == 0u ) {
 		display_lock();
-	}	
+	}
 }
 
 void input_cnt_int() {
@@ -128,12 +127,12 @@ void input_cnt_int() {
 
 	if (cnt3 != 0u) {
 		cnt3--;	
-	}	
+	}
 	if (delay_off != 0u) {
 		delay_off--;
 	}
 	
 	if (delay_unlock != 0u) {
-		delay_unlock--;	
-	}	
+		delay_unlock--;
+	}
 }

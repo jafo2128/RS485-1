@@ -32,7 +32,7 @@ unsigned char received_data[BUFFER_SIZE];
 unsigned char send_sequence_number, receive_sequence_number; //3bit used!! Count to 7, 8 => 0!
 
 //HDLC transmit list
-unsigned char transmit_data[BUFFER_SIZE];
+unsigned char transmit_buffer[BUFFER_SIZE*2];
 char head, tail;
 
 void hdlc_init() {
@@ -88,7 +88,7 @@ void hdlc_init() {
 char hdlc_getAddress() {
 	return address;
 }
-	
+
 void hdlc_setAddress(char new_address) {
 	address= new_address;
 	
@@ -105,42 +105,44 @@ void hdlc_setAddress(char new_address) {
 	EECON1bits.WREN= 0; //disable write to EEPROM
 }
 
-void hdlc_send() {
-	if (TXSTA1bits.TRMT == 1u) { //If transmit buffer empty
-		TXREG1= transmit_data[head];
-		head++;
-		if (head >= BUFFER_SIZE-1) {
-			head= 0;	
-		}
-	}
-}	
-
-void hdlc_send(unsigned char data) {
-
-	if (tail >= BUFFER_SIZE-1) { //Set data in transmission buffer
-		transmit_data[0]= data;	
-		tail= 0;
-	} else {
-		transmit_data[tail+1]= data;
+void hdlc_transmit() {
+	if (TXSTA1bits.TRMT == 1u && head != tail) { //If transmit buffer empty
+		PORTC|= 0x30; //Transmit enable, receive disable
+		TXREG1= transmit_buffer[tail];
 		tail++;
-	}
-		
-	if (data == DLE) {
-		if (tail >= BUFFER_SIZE-1) { //Set DLE in transmission buffer
-			transmit_data[0]= data;	
+		if (tail >= 2*BUFFER_SIZE-1) {
 			tail= 0;
-		} else {
-			transmit_data[tail+1]= data;
-			tail++;
 		}
-	}	
-}	
+	} else if (head == tail) {
+		PORTC&= 0xCF; //Disable receive/transmit
+	}
+}
+
+void hdlc_sendbuffer(unsigned char data, char headers) {
+	if (head >= 2*BUFFER_SIZE-1) { //Set data in transmission buffer
+		transmit_buffer[0]= data;
+		head= 0;
+	} else {
+		transmit_buffer[head+1]= data;
+		head++;
+	}
+	
+	if (data == DLE && headers != 0) {  //Do not escape DLE when it is in the header!
+		if (head >= 2*BUFFER_SIZE-1) { //Set DLE in transmission buffer
+			transmit_buffer[0]= data;
+			head= 0;
+		} else {
+			transmit_buffer[head+1]= data;
+			head++;
+		}
+	}
+}
 
 void hdlc_removeDLEs() {
 	
-}	
+}
 
-void hdlc_checkData() {
+void hdlc_checkData() {  //What do I have to do?
 	if (received_data[0] == address) { //For this slave? Otherwise do nothing
 		if (control.NRM == 0u) { //Waiting on connection setup
 			if (received_data[1]&0xC0 == 0xC0 && received_data[1]&0x37 == 0x01) { //Unnumbered Frame, set normal response mode
@@ -148,18 +150,38 @@ void hdlc_checkData() {
 				control.NRM= 1u; //Now we are in Normal Response Mode
 				if (received_data[1]&0x08 == 0x08) { //Check poll flag
 					// Send Unnumbered acknowledge
+					hdlc_sendbuffer(DLE,1);
+					hdlc_sendbuffer(STX,0);
+					hdlc_sendbuffer(address,0);
+					hdlc_sendbuffer(0xCE,0); //UA
+					hdlc_sendbuffer(0x00,0); //FCS!!
+					hdlc_sendbuffer(0x00,0);
+					hdlc_sendbuffer(DLE,1);
+					hdlc_sendbuffer(ETX,0);
 				}
 			} else if (received_data[1]&0xC0 == 0xC0 && received_data[1]&0x37 == 0x02) { //Unnumbered Frame, disconnect
 				control.NRM= 0u;
 				if (received_data[1]&0x08 == 0x08) { //Check poll flag
 					//Send Unnumbered acknowledge
-					hdlc_send(address);
-					hdlc_send(0b11001110);
-					hdlc_send(0); //FCS!!
-					hdlc_send(0);
+					hdlc_sendbuffer(DLE, 1);
+					hdlc_sendbuffer(ETX, 1);
+					hdlc_sendbuffer(address, 0);
+					hdlc_sendbuffer(0xCE, 0); //UA
+					hdlc_sendbuffer(0, 0); //FCS!!
+					hdlc_sendbuffer(0, 0);
+					hdlc_sendbuffer(DLE, 1);
+					hdlc_sendbuffer(ETX, 1);
 				}
 			} else if (received_data[1]&0x08 == 0x08) {
-				//Send DM: disconnect mode
+				//Send disconnect mode
+				hdlc_sendbuffer(DLE, 1);
+				hdlc_sendbuffer(ETX, 1);
+				hdlc_sendbuffer(address, 0);
+				hdlc_sendbuffer(0xF8, 0); //DM
+				hdlc_sendbuffer(0, 0); //FCS!!
+				hdlc_sendbuffer(0, 0);
+				hdlc_sendbuffer(DLE, 1);
+				hdlc_sendbuffer(ETX, 1);
 			}
 		} else { //A connection is alive
 			//Check frame type's
@@ -168,8 +190,6 @@ void hdlc_checkData() {
 					receive_sequence_number++; //increment sequence number.
 					receive_sequence_number%= 3;
 				}
-				
-
 				//Normaly not used here, so send ack
 				if (received_data[1]&0x08 == 0x08) {
 					// Send ack
@@ -184,12 +204,12 @@ void hdlc_checkData() {
 				if (received_data[1]&0x60 == 0x00) { //Receive Ready, used to poll for data
 					//Send data or send RR when no data
 				} else if (received_data[1]&0x60 == 0x10) { //Reject
-					//Data not correct received by master, resend! 
+					//Data not correct received by master, resend!
 				} else if (received_data[1]&0x60 == 0x20) { //Receive Not Ready
 				
 				} else if (received_data[1]&0x60 == 0x30) { //Selective reject
 				
-				}	
+				}
 			
 			} else if (received_data[1]&0xC0 == 0xC0) { //Unnumbered Frame
 				if (received_data[1]&0x37 == 0x01) { //Set normal response mode
@@ -201,18 +221,25 @@ void hdlc_checkData() {
 				} else if (received_data[1]&0x37 == 0x02) { //Disconnect
 					control.NRM= 0u;
 					if (received_data[1]&0x08 == 0x08) { //Check poll flag
-						// Send Unnumbered acknowledge
+						//Send Unnumbered acknowledge
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(ETX, 1);
+						hdlc_sendbuffer(address, 0);
+						hdlc_sendbuffer(0xCE, 0); //UA
+						hdlc_sendbuffer(0, 0); //FCS!!
+						hdlc_sendbuffer(0, 0);
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(ETX, 1);
 					}
 				} else if (received_data[1]&0x37 == 0x0C) { //Unnumbered acknowledge
-				
+					//Do nothing.
 				}
 			}
 		}
-	}		
-	
-}	
+	}
+}
 
-void hdlc_read(unsigned char input) {
+void hdlc_receive(unsigned char input) {
 	//Drop data => to many packets!
 	if (current_size >= (unsigned)(BUFFER_SIZE-1)) {
 		control.SFD= 0u;
@@ -247,12 +274,13 @@ void hdlc_read(unsigned char input) {
 			received_data[5]= receiving_data[5];
 			received_data[6]= receiving_data[6];
 			received_data[7]= receiving_data[7];
-			if (*(&received_data[received_size-1]) == crc16_calc(received_data, received_size)) {
+			/*if (*(&received_data[received_size-1]) == crc16_calc(received_data, received_size)) {
 				hdlc_removeDLEs;
 				hdlc_checkData;
 			} else {
 				//Send S-Frame if address is correct, wrong CRC, and P bit=1 => REJ
-			}
+			}*/
+			hdlc_checkData;
 		} else {
 			control.DLE= 0u;
 		}

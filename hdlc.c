@@ -165,20 +165,17 @@ void hdlc_checkData() {  //What do I have to do?
 	} else if (control.NRM == 1u) { //A connection is alive
 		//Check frame type's
 		if ( (received_data[1]&0x80) == 0x00u) { //Information Frame
-			if (receive_sequence_number == (received_data[1]&0x07) ) { //Testing sequence numbers from master.
-				receive_sequence_number++; //increment sequence number.
-				receive_sequence_number%= 0x07;
+			if (receive_sequence_number == ((received_data[1] & 0x70)>>4) ) {//Correct send number received?
+				//We received everything from master, so tell him that. (Master: drop send buffer)
+				receive_sequence_number++;
+				receive_sequence_number&= 0x07;
 			}
-			//Normaly not used here, so send ack
-			if ( (received_data[1]&0x08) == 0x08u) {
-				// Send ack
-			}
-		} else if ( (received_data[1]&0xC0) == 0x80u) { //Supervisory Frame
-			if (send_sequence_number == (received_data[1]&0x07) ) { //Testing sequence numbers from master.
-				head= tail= 0; //reset buffer
-				if ( (received_data[1]&0x60) == 0x00u) { //Receive Ready, used to poll for data
-					//if (input_capt1() == 0u) { //No data => RR
-					if ( 1 == 0 ) { //Testing I-Frame
+			
+			if (send_sequence_number == (received_data[1]&0x07) ) { //Correct receive number?
+				//Master received previous frame correct => drop send buffer
+				head= tail= 0u;
+				if ( (received_data[1]&0x08) == 0x08u) { //Receive Ready, used to poll for data
+					if (input_capt1() == 0u) { //No data => RR
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
 						hdlc_sendbuffer(address, 0);
@@ -194,7 +191,40 @@ void hdlc_checkData() {  //What do I have to do?
 						hdlc_sendbuffer(address, 0);
 						tmp= send_sequence_number<<4;
 						send_sequence_number++;
-						send_sequence_number%= 0x07;
+						send_sequence_number&= 0x07;
+						tmp|= receive_sequence_number;
+						tmp|= 0x08; //Poll-flag
+						hdlc_sendbuffer((0x7F&tmp), 0); //I-Frame
+						hdlc_sendbuffer(0, 0); //FCS!!
+						hdlc_sendbuffer(0, 0);
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(ETX, 1);
+					}
+				}
+			} else { //Resend buffer
+				tail= 0u;
+			}
+		} else if ( (received_data[1]&0xC0) == 0x80u) { //Supervisory Frame
+			if (send_sequence_number == (received_data[1]&0x07) ) { //Testing sequence numbers from master.
+				head= tail= 0; //reset buffer
+				if ( (received_data[1]&0x08) == 0x08u) { //Receive Ready, used to poll for data
+					if (input_capt1() == 0u) { //No data => RR
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(STX, 1);
+						hdlc_sendbuffer(address, 0);
+						tmp= receive_sequence_number;
+						hdlc_sendbuffer((0x88|tmp), 0); //RR: no data to transmit
+						hdlc_sendbuffer(0, 0); //FCS!!
+						hdlc_sendbuffer(0, 0);
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(ETX, 1);
+					} else { //Send Data => I-Frame
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(STX, 1);
+						hdlc_sendbuffer(address, 0);
+						tmp= send_sequence_number<<4;
+						send_sequence_number++;
+						send_sequence_number&= 0x07;
 						tmp|= receive_sequence_number;
 						tmp|= 0x08; //Poll-flag
 						hdlc_sendbuffer((0x7F&tmp), 0); //I-Frame

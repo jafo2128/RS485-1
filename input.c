@@ -116,6 +116,13 @@ void input_loop() {
 	}
 }
 
+unsigned char input_capt1() {
+	unsigned char tmp= capt1;
+	capt1=0;
+	return tmp;
+		
+}	
+
 void input_cnt_int() {
 	if (cnt1 != 0u) {
 		cnt1--;

@@ -10,5 +10,6 @@
 void input_init(void);
 void input_loop(void);
 void input_cnt_int(void);
+unsigned char input_capt1(void);
 
 #endif

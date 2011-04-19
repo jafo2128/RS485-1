@@ -43,18 +43,7 @@ void main (void)
 	//Enable global interrupts: High priority: 0008h, Low priority: 0018h
 	RCONbits.IPEN= 0;
 	INTCONbits.PEIE= 1;
-	INTCONbits.GIE= 1;
-	
-	//Testing CRC-16-CITT
-	CRC[0]= 0x12;
-	CRC[1]= 0x34;
-	CRC[2]= 0x56;
-	CRC[3]= 0x78;
-	// http://www.lammertbies.nl/comm/info/crc-calculation.html
-	/*if (crc16_calc(&CRC, 4) == 0x9015) {
-		//Valid CRC
-		display_show(1);
-	}*/	
+	INTCONbits.GIE= 0;
 	
 	//Main loop	
 	while (1) {
@@ -91,9 +80,9 @@ void InterruptHandlerHigh () {
 	
 	/*if (PIR1bits.RC1IF) { //check for UART1 receive
 		while (PIR1bits.RC1IF) {
-			hdlc_read(RCREG1);
+			hdlc_receive(RCREG1);
 		}
-	}*/	
+	}*/
 }
 
 //----------------------------------------------------------------------------

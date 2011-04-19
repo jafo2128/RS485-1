@@ -7,7 +7,7 @@ const unsigned char ETX= 0x03;
 typedef union {
 	unsigned char byte;
 	struct {
-		unsigned SFD :1; //Start of frame delimiter
+		unsigned SYNC :1; // Found DLE/STX from start of fram
 		unsigned DLE :1;
 		unsigned bit2 :1;
 		unsigned bit3 :1;
@@ -34,6 +34,10 @@ unsigned char transmit_buffer[0x20u];
 unsigned char head, tail;
 
 unsigned char tmp;
+
+//function prototype's
+void hdlc_checkData(void);
+void hdlc_removeDLEs(void);
 
 void hdlc_init() {
 	//Read address in EEPROM.
@@ -92,43 +96,25 @@ void hdlc_setAddress(char new_address) {
 }
 
 void hdlc_transmit() {
-	if ( (PIR1bits.TX1IF == 1u) && (TXSTA1bits.TRMT == 1u)&& (head != tail) ) { //If transmit buffer empty and something to send
+	if ( (TXSTA1bits.TRMT == 1u) && (head != tail) ) { //If transmit buffer empty and something to send
 		PORTC|= 0x30; //Transmit enable, receive disable
-		tail++;
-		if (tail >= 0x20u) {
-			tail= 0;
-		}
-		
 		TXREG1= transmit_buffer[tail]; //Send tail
-		
-		if (head == tail) {
-			PORTC&= 0xCF; //Disable receive/transmit
-		}
+		tail++;
+	} else if (TXSTA1bits.TRMT == 1u) { //Disable transmitter after last byte.
+		PORTC&= 0xCF; //Disable transmit, enable receive
 	}
 }
 
 void hdlc_sendbuffer(unsigned char data, char headers) {
+	//Set data in transmission buffer
+	transmit_buffer[head]= data;
 	head++;
-	if (head >= 0x20u) { //Set data in transmission buffer
-		transmit_buffer[0]= data;
-		head= 0;
-	} else {
-		transmit_buffer[head]= data;
-	}
 	
 	if ( (data == DLE) && (headers == 0)) {  //Do not escape DLE when it is in the header!
+		//Set DLE in transmission buffer
+		transmit_buffer[head]= DLE;
 		head++;
-		if (head >= 0x20u) { //Set DLE in transmission buffer
-			transmit_buffer[0]= data;
-			head= 0;
-		} else {
-			transmit_buffer[head]= data;
-		}
 	}
-}
-
-void hdlc_removeDLEs() {
-	
 }
 
 void hdlc_checkData() {  //What do I have to do?
@@ -139,6 +125,7 @@ void hdlc_checkData() {  //What do I have to do?
 				control.NRM= 1u; //Now we are in Normal Response Mode
 				if ( (received_data[1]&0x08) == 0x08u) { //Check poll flag
 					// Send Unnumbered acknowledge
+					head= tail= 0; //reset buffer
 					hdlc_sendbuffer(DLE, 1);
 					hdlc_sendbuffer(STX, 1);
 					hdlc_sendbuffer(address, 0);
@@ -147,12 +134,12 @@ void hdlc_checkData() {  //What do I have to do?
 					hdlc_sendbuffer(0x00, 0);
 					hdlc_sendbuffer(DLE, 1);
 					hdlc_sendbuffer(ETX, 1);
-					hdlc_sendbuffer(0x00, 0);
 				}
 			} else if ( (received_data[1]&0xC0) == 0xC0u && (received_data[1]&0x37) == 0x02u) { //Unnumbered Frame, disconnect
 				control.NRM= 0u;
 				if ( (received_data[1]&0x08) == 0x08u) { //Check poll flag
 					//Send Unnumbered acknowledge
+					head= tail= 0; //reset buffer
 					hdlc_sendbuffer(DLE, 1);
 					hdlc_sendbuffer(STX, 1);
 					hdlc_sendbuffer(address, 0);
@@ -161,7 +148,6 @@ void hdlc_checkData() {  //What do I have to do?
 					hdlc_sendbuffer(0, 0);
 					hdlc_sendbuffer(DLE, 1);
 					hdlc_sendbuffer(ETX, 1);
-					hdlc_sendbuffer(0x00, 0);
 				}
 			} else if ( (received_data[1]&0x08) == 0x08u) {
 				//Send disconnect mode
@@ -173,7 +159,6 @@ void hdlc_checkData() {  //What do I have to do?
 				hdlc_sendbuffer(0, 0);
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(ETX, 1);
-				hdlc_sendbuffer(0x00, 0);
 			}
 		} else { //A connection is alive
 			//Check frame type's
@@ -195,6 +180,7 @@ void hdlc_checkData() {  //What do I have to do?
 				//Supervisory Code
 				if ( (received_data[1]&0x60) == 0x00u) { //Receive Ready, used to poll for data
 					if (input_capt1() == 0u) { //No data => RR
+						head= tail= 0; //reset buffer
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
 						hdlc_sendbuffer(address, 0);
@@ -204,8 +190,8 @@ void hdlc_checkData() {  //What do I have to do?
 						hdlc_sendbuffer(0, 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
-						hdlc_sendbuffer(0x00, 0);
 					} else { //Data => I-Frame
+						head= tail= 0; //reset buffer
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
 						hdlc_sendbuffer(address, 0);
@@ -217,7 +203,6 @@ void hdlc_checkData() {  //What do I have to do?
 						hdlc_sendbuffer(0, 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
-						hdlc_sendbuffer(0x00, 0);
 					}
 				} else if ( (received_data[1]&0x60) == 0x10u) { //Reject
 					//Data not correct received by master, resend!
@@ -233,6 +218,7 @@ void hdlc_checkData() {  //What do I have to do?
 					control.NRM= 1u;
 					if ( (received_data[1]&0x08) == 0x08u) { //Check poll flag
 						// Send Unnumbered acknowledge
+						head= tail= 0; //reset buffer
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
 						hdlc_sendbuffer(address, 0);
@@ -241,12 +227,12 @@ void hdlc_checkData() {  //What do I have to do?
 						hdlc_sendbuffer(0x00, 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
-						hdlc_sendbuffer(0x00, 0);
 					}
 				} else if ( (received_data[1]&0x37) == 0x02u) { //Disconnect
 					control.NRM= 0u;
 					if ((received_data[1]&0x08) == 0x08u) { //Check poll flag
 						//Send Unnumbered acknowledge
+						head= tail= 0; //reset buffer
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
 						hdlc_sendbuffer(address, 0);
@@ -267,16 +253,16 @@ void hdlc_checkData() {  //What do I have to do?
 void hdlc_receive(unsigned char received_byte) {
 	//Drop data => to many packets!
 	if (current_size >= 0x10u) { //Max size = 16 + 2. (2 from DLE & STX)
-		control.SFD= 0u;
+		control.SYNC= 0u;
 		control.DLE= 0u;
 	}
 	
 	//Waiting on Start of frame: DLE & STX
-	if (control.SFD == 0u) {
+	if (control.SYNC == 0u) {
 		if (received_byte == DLE) {
 			control.DLE= 1u; //DLE found => next STX!
 		} else if (control.DLE == 1u && received_byte == STX) { //Start of frame found!
-			control.SFD= 1u;
+			control.SYNC= 1u;
 			control.DLE= 0u;
 			current_size= 0u;
 		} else {control.DLE= 0u;} //Not valid charter
@@ -291,18 +277,11 @@ void hdlc_receive(unsigned char received_byte) {
 			current_size= 0u;
 			control.DLE= 0u;
 		} else if (control.DLE == 1u && received_byte == ETX) { //End of frame found :):)
-			control.SFD= 0u; //We have to resync
-			received_size= current_size-2;
-			received_data[0]= receiving_data[0];
-			received_data[1]= receiving_data[1];
-			received_data[2]= receiving_data[2];
-			received_data[3]= receiving_data[3];
-			received_data[4]= receiving_data[4];
-			received_data[5]= receiving_data[5];
-			received_data[6]= receiving_data[6];
-			received_data[7]= receiving_data[7];
+			control.SYNC= 0u; //We have to resync
+			received_size= current_size - 2 ; //Remove DLE & ETX, unneeded!
+			hdlc_removeDLEs();
 			/*if (*(&received_data[received_size-1]) == crc16_calc(received_data, received_size)) {
-				hdlc_removeDLEs;
+				
 				hdlc_checkData;
 			} else {
 				//Send S-Frame if address is correct, wrong CRC, and P bit=1 => REJ
@@ -312,4 +291,16 @@ void hdlc_receive(unsigned char received_byte) {
 			control.DLE= 0u;
 		}
 	}
+}
+
+void hdlc_removeDLEs() {
+	unsigned int i, offset;
+	offset= 0;
+	for (i=0; i < received_size; i++) {
+		if (receiving_data[i] == DLE && receiving_data[i+1] == DLE) { // If DLE, skip one place
+			i++; offset++;
+		}
+		received_data[i-offset]= receiving_data[i];
+	}
+	received_size-= offset; //Set receiving_size to correct site.
 }

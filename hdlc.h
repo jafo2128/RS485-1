@@ -2,6 +2,7 @@
 #define HDLC
 
 #include "CRC16.h"
+#include "input.h"
 #include <p18f25k22.h>
 
 

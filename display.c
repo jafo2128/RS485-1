@@ -29,7 +29,7 @@ void display_show(char disp_value) {
 		if (buffer[1] >= 0x30 && buffer[1]  <= 0x39) {//Valid ASCII charter: 0-9
 			buffer[2]= buffer[0]; //Switching places for btoa
 			buffer[0]= buffer[1]-0x30; //ASCII to binary
-			buffer[1]= buffer[2]-0x30; 
+			buffer[1]= buffer[2]-0x30;
 		} else {
 			buffer[1]= 0xff; //Hide leading zero
 			if (buffer[0] >= 0x30 && buffer[0]  <= 0x39) { //Valid ASCII charter
@@ -48,7 +48,7 @@ void display_show(char disp_value) {
 }
 
 void display_lock() {
-	locked= 0xff;	
+	locked= 0xff;
 	
 	//Everything above 9 = off.
 	display_show(255);
@@ -60,16 +60,16 @@ void display_lock() {
 }
 	
 void display_unlock() {
-	locked= 0x00;	
+	locked= 0x00;
 }
 
 void display_on() {
-	display_show(value);	
+	display_show(value);
 }	
 
 void display_inc() {
 	if (locked == 0x00 && value < 32) {
-		value++;	
+		value++;
 	}
 	display_show(value);
 }

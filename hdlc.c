@@ -16,7 +16,7 @@ typedef union {
 		unsigned bit6 :1;
 		unsigned NRM :1; //True if a connection setup has happened (U-frame,SNRM)
 	};
-} bits;		
+} bits;
 
 
 //Receiving charters
@@ -118,135 +118,112 @@ void hdlc_sendbuffer(unsigned char data, char headers) {
 }
 
 void hdlc_checkData() {  //What do I have to do?
-	if (received_data[0] == address) { //For this slave? Otherwise do nothing
-		if (control.NRM == 0u) { //Waiting on connection setup
-			if ( (received_data[1]&0xC0) == 0xC0u && (received_data[1]&0x37) == 0x01u) { //Unnumbered Frame, set normal response mode
-				receive_sequence_number= send_sequence_number= 0; //init sequence numbers to zero
-				control.NRM= 1u; //Now we are in Normal Response Mode
-				if ( (received_data[1]&0x08) == 0x08u) { //Check poll flag
-					// Send Unnumbered acknowledge
-					head= tail= 0; //reset buffer
-					hdlc_sendbuffer(DLE, 1);
-					hdlc_sendbuffer(STX, 1);
-					hdlc_sendbuffer(address, 0);
-					hdlc_sendbuffer(0xCE, 0); //UA
-					hdlc_sendbuffer(0x00, 0); //FCS!!
-					hdlc_sendbuffer(0x00, 0);
-					hdlc_sendbuffer(DLE, 1);
-					hdlc_sendbuffer(ETX, 1);
-				}
-			} else if ( (received_data[1]&0xC0) == 0xC0u && (received_data[1]&0x37) == 0x02u) { //Unnumbered Frame, disconnect
-				control.NRM= 0u;
-				if ( (received_data[1]&0x08) == 0x08u) { //Check poll flag
-					//Send Unnumbered acknowledge
-					head= tail= 0; //reset buffer
-					hdlc_sendbuffer(DLE, 1);
-					hdlc_sendbuffer(STX, 1);
-					hdlc_sendbuffer(address, 0);
-					hdlc_sendbuffer(0xCE, 0); //UA
-					hdlc_sendbuffer(0, 0); //FCS!!
-					hdlc_sendbuffer(0, 0);
-					hdlc_sendbuffer(DLE, 1);
-					hdlc_sendbuffer(ETX, 1);
-				}
-			} else if ( (received_data[1]&0x08) == 0x08u) {
-				//Send disconnect mode
+	if ( (received_data[1]&0xC0) == 0xC0u) { //Unnumbered Frame
+		if ( (received_data[1]&0x37) == 0x01u) { //U-F, set normal response mode
+			receive_sequence_number= send_sequence_number= 0; //init sequence numbers to zero
+			control.NRM= 1u; //Now we are in Normal Response Mode
+			if ( (received_data[1]&0x08) == 0x08u) { //Check poll flag
+				// Send Unnumbered acknowledge
+				head= tail= 0; //reset buffer
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(STX, 1);
 				hdlc_sendbuffer(address, 0);
-				hdlc_sendbuffer(0xF8, 0); //DM
+				hdlc_sendbuffer(0xCE, 0); //UA
+				hdlc_sendbuffer(0x00, 0); //FCS!!
+				hdlc_sendbuffer(0x00, 0);
+				hdlc_sendbuffer(DLE, 1);
+				hdlc_sendbuffer(ETX, 1);
+			}
+		} else if ( (received_data[1]&0x37) == 0x02u) { //U-F, disconnect
+			control.NRM= 0u;
+			if ( (received_data[1]&0x08) == 0x08u) { //Check poll flag
+				//Send Unnumbered acknowledge
+				head= tail= 0; //reset buffer
+				hdlc_sendbuffer(DLE, 1);
+				hdlc_sendbuffer(STX, 1);
+				hdlc_sendbuffer(address, 0);
+				hdlc_sendbuffer(0xCE, 0); //UA
 				hdlc_sendbuffer(0, 0); //FCS!!
 				hdlc_sendbuffer(0, 0);
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(ETX, 1);
 			}
-		} else { //A connection is alive
-			//Check frame type's
-			if ( (received_data[1]&0x80) == 0x00u) { //Information Frame
-				if (receive_sequence_number == (received_data[1]&0x03) ) { //Testing sequence numbers from master.
-					receive_sequence_number++; //increment sequence number.
-					receive_sequence_number%= 3;
+		} else if ((received_data[1]&0x37) == 0x06u) { //U-F, ACK
+			//Do nothing
+		} else if ( (received_data[1]&0x08) == 0x08u) { //Unknown, poll-flag, ask to connect
+			//Send FRMR
+			head= tail= 0;
+			hdlc_sendbuffer(DLE, 1);
+			hdlc_sendbuffer(STX, 1);
+			hdlc_sendbuffer(address, 0);
+			hdlc_sendbuffer(0xE9, 0); //FRMR
+			hdlc_sendbuffer(0, 0); //FCS!!
+			hdlc_sendbuffer(0, 0);
+			hdlc_sendbuffer(DLE, 1);
+			hdlc_sendbuffer(ETX, 1);
+		}
+	} else if (control.NRM == 1u) { //A connection is alive
+		//Check frame type's
+		if ( (received_data[1]&0x80) == 0x00u) { //Information Frame
+			if (receive_sequence_number == (received_data[1]&0x03) ) { //Testing sequence numbers from master.
+				receive_sequence_number++; //increment sequence number.
+				receive_sequence_number%= 3;
+			}
+			//Normaly not used here, so send ack
+			if ( (received_data[1]&0x08) == 0x08u) {
+				// Send ack
+			}
+		} else if ( (received_data[1]&0xC0) == 0x80u) { //Supervisory Frame
+			if (receive_sequence_number == (received_data[1]&0x03) ) { //Testing sequence numbers from master.
+				receive_sequence_number++; //increment sequence number.
+				receive_sequence_number%= 3;
+			}
+		
+			//Supervisory Code
+			if ( (received_data[1]&0x60) == 0x00u) { //Receive Ready, used to poll for data
+				if (input_capt1() == 0u) { //No data => RR
+					head= tail= 0; //reset buffer
+					hdlc_sendbuffer(DLE, 1);
+					hdlc_sendbuffer(STX, 1);
+					hdlc_sendbuffer(address, 0);
+					tmp= receive_sequence_number;
+					hdlc_sendbuffer((0x88|tmp), 0); //RR: no data to transmit
+					hdlc_sendbuffer(0, 0); //FCS!!
+					hdlc_sendbuffer(0, 0);
+					hdlc_sendbuffer(DLE, 1);
+					hdlc_sendbuffer(ETX, 1);
+				} else { //Data => I-Frame
+					head= tail= 0; //reset buffer
+					hdlc_sendbuffer(DLE, 1);
+					hdlc_sendbuffer(STX, 1);
+					hdlc_sendbuffer(address, 0);
+					tmp= send_sequence_number<<4;
+					tmp|= receive_sequence_number;
+					tmp|= 0x08; //Poll-flag
+					hdlc_sendbuffer((0x7F&tmp), 0); //I-Frame
+					hdlc_sendbuffer(0, 0); //FCS!!
+					hdlc_sendbuffer(0, 0);
+					hdlc_sendbuffer(DLE, 1);
+					hdlc_sendbuffer(ETX, 1);
 				}
-				//Normaly not used here, so send ack
-				if ( (received_data[1]&0x08) == 0x08u) {
-					// Send ack
-				}	
-			} else if ( (received_data[1]&0xC0) == 0x80u) { //Supervisory Frame
-				if (receive_sequence_number == (received_data[1]&0x03) ) { //Testing sequence numbers from master.
-					receive_sequence_number++; //increment sequence number.
-					receive_sequence_number%= 3;
-				}
-			
-				//Supervisory Code
-				if ( (received_data[1]&0x60) == 0x00u) { //Receive Ready, used to poll for data
-					if (input_capt1() == 0u) { //No data => RR
-						head= tail= 0; //reset buffer
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(STX, 1);
-						hdlc_sendbuffer(address, 0);
-						tmp= receive_sequence_number;
-						hdlc_sendbuffer((0x88|tmp), 0); //RR
-						hdlc_sendbuffer(0, 0); //FCS!!
-						hdlc_sendbuffer(0, 0);
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(ETX, 1);
-					} else { //Data => I-Frame
-						head= tail= 0; //reset buffer
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(STX, 1);
-						hdlc_sendbuffer(address, 0);
-						tmp= send_sequence_number<<4;
-						tmp|= receive_sequence_number;
-						tmp|= 0x08; //Poll-flag
-						hdlc_sendbuffer((0x7F&tmp), 0); //I-Frame
-						hdlc_sendbuffer(0, 0); //FCS!!
-						hdlc_sendbuffer(0, 0);
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(ETX, 1);
-					}
-				} else if ( (received_data[1]&0x60) == 0x10u) { //Reject
-					//Data not correct received by master, resend!
-				} else if ( (received_data[1]&0x60) == 0x20u) { //Receive Not Ready
-				
-				} else if ( (received_data[1]&0x60) == 0x30u) { //Selective reject
-				
-				}
-			
-			} else if ( (received_data[1]&0xC0) == 0xC0u) { //Unnumbered Frame
-				if ( (received_data[1]&0x37) == 0x01u) { //Set normal response mode
-					receive_sequence_number= send_sequence_number= 0u;
-					control.NRM= 1u;
-					if ( (received_data[1]&0x08) == 0x08u) { //Check poll flag
-						// Send Unnumbered acknowledge
-						head= tail= 0; //reset buffer
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(STX, 1);
-						hdlc_sendbuffer(address, 0);
-						hdlc_sendbuffer(0xCE, 0); //UA
-						hdlc_sendbuffer(0x00, 0); //FCS!!
-						hdlc_sendbuffer(0x00, 0);
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(ETX, 1);
-					}
-				} else if ( (received_data[1]&0x37) == 0x02u) { //Disconnect
-					control.NRM= 0u;
-					if ((received_data[1]&0x08) == 0x08u) { //Check poll flag
-						//Send Unnumbered acknowledge
-						head= tail= 0; //reset buffer
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(STX, 1);
-						hdlc_sendbuffer(address, 0);
-						hdlc_sendbuffer(0xCE, 0); //UA
-						hdlc_sendbuffer(0, 0); //FCS!!
-						hdlc_sendbuffer(0, 0);
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(ETX, 1);
-					}
-				} else if ( (received_data[1]&0x37) == 0x0Cu) { //Unnumbered acknowledge
-					//Do nothing.
-				}
+			} else if ( (received_data[1]&0x60) == 0x10u) { //Reject
+				//Data not correct received by master, resend!
+				head= 0; //Resend buffer
 			}
 		}
+	} else { // Not Unnumbered Frame, not in Normal Response Mode
+		if ((received_data[1]&0x08) == 0x08u) { //Check poll flag, if true send data
+			//Send disconnect mode
+			head= tail= 0;
+			hdlc_sendbuffer(DLE, 1);
+			hdlc_sendbuffer(STX, 1);
+			hdlc_sendbuffer(address, 0);
+			hdlc_sendbuffer(0xF8, 0); //DM
+			hdlc_sendbuffer(0, 0); //FCS!!
+			hdlc_sendbuffer(0, 0);
+			hdlc_sendbuffer(DLE, 1);
+			hdlc_sendbuffer(ETX, 1);
+		}	
 	}
 }
 
@@ -279,14 +256,15 @@ void hdlc_receive(unsigned char received_byte) {
 		} else if (control.DLE == 1u && received_byte == ETX) { //End of frame found :):)
 			control.SYNC= 0u; //We have to resync
 			received_size= current_size - 2 ; //Remove DLE & ETX, unneeded!
-			hdlc_removeDLEs();
-			/*if (*(&received_data[received_size-1]) == crc16_calc(received_data, received_size)) {
-				
-				hdlc_checkData;
-			} else {
-				//Send S-Frame if address is correct, wrong CRC, and P bit=1 => REJ
-			}*/
-			hdlc_checkData();
+			if (receiving_data[0] == address) {
+				hdlc_removeDLEs();
+				/*if (*(&received_data[received_size-1]) == crc16_calc(received_data, received_size)) {
+					hdlc_checkData;
+				} else {
+					//Send S-Frame if address is correct, wrong CRC, and P bit=1 => REJ
+				}*/
+				hdlc_checkData();
+			}
 		} else {
 			control.DLE= 0u;
 		}

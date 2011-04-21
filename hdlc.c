@@ -1,9 +1,12 @@
 #include "hdlc.h"
 
+//Define constants for  receiving & transmission
 const unsigned char DLE= 0x10;
 const unsigned char STX= 0x02;
 const unsigned char ETX= 0x03;
 
+
+//used as boolean
 typedef union {
 	unsigned char byte;
 	struct {
@@ -17,27 +20,37 @@ typedef union {
 		unsigned NRM :1; //True if a connection setup has happened (U-frame,SNRM)
 	};
 } bits;
-
+bits control;
 
 //Receiving charters
-bits control;
-unsigned int current_size, received_size, cnt;
-unsigned char address;
-unsigned char receiving_data[16];
-unsigned char received_data[16];
+unsigned int current_size, received_size, cnt; //Counters
+unsigned char address;	//Address of slave
+unsigned char receiving_data[0x10]; //Buffer for receiving data
+unsigned char received_data[0x10]; //Same as receiving buffer, maybe remove??
 
-//HDLC transmit/receive data
+//HDLC transmit/receive counter
 unsigned char send_sequence_number, receive_sequence_number; //3bit used!! Count to 7, 8 => 0!
 
-//HDLC transmit list
+//Transmit buffer, and counters for position in buffer
 unsigned char transmit_buffer[0x20u];
 unsigned char head, tail;
 
+//Temp variable
 unsigned char tmp;
+//Temp variable for capt1
+unsigned char tmp_capt1;
+
+//For int to char
+typedef union combo {
+	int Int;	   
+	unsigned char Char[2];	   
+} Tcombo;
+
+Tcombo crc;
 
 //function prototype's
-void hdlc_checkData(void);
-void hdlc_removeDLEs(void);
+void hdlc_checkFrame(void);
+void hdlc_parseFrame(void);
 
 void hdlc_init() {
 	//Read address in EEPROM.
@@ -48,6 +61,8 @@ void hdlc_init() {
 	address= EEDATA;  //Save EEPROM in address
 	if (address > (unsigned)32) {address= 0;} //Valid address?
 	
+	
+	//Init variables
 	control.byte= 0u;
 	current_size= received_size= 0;
 	head= tail= 0;
@@ -75,10 +90,12 @@ void hdlc_init() {
 	RCSTA1bits.SPEN= 1; //Enable UART
 }
 
+//Get current address of slave
 char hdlc_getAddress() {
 	return address;
 }
 
+//Change address of slave, and write to EEPROM
 void hdlc_setAddress(char new_address) {
 	address= new_address;
 	
@@ -95,6 +112,8 @@ void hdlc_setAddress(char new_address) {
 	EECON1bits.WREN= 0; //disable write to EEPROM
 }
 
+
+//If transmission buffer is not full and we have something to transmit, transmit itS
 void hdlc_transmit() {
 	if ( (TXSTA1bits.TRMT == 1u) && (head != tail) ) { //If transmit buffer empty and something to send
 		PORTC|= 0x30; //Transmit enable, receive disable
@@ -105,6 +124,7 @@ void hdlc_transmit() {
 	}
 }
 
+//Add data to transmission buffer, and if data = DLE when it isn't a header, escape it.
 void hdlc_sendbuffer(unsigned char data, char headers) {
 	//Set data in transmission buffer
 	transmit_buffer[head]= data;
@@ -117,7 +137,8 @@ void hdlc_sendbuffer(unsigned char data, char headers) {
 	}
 }
 
-void hdlc_checkData() {  //What do I have to do?
+//Parse incomming data and act accordingly
+void hdlc_parseFrame() {  //What do I have to do?
 	if ( (received_data[1]&0xC0) == 0xC0u) { //Unnumbered Frame
 		if ( (received_data[1]&0x37) == 0x01u) { //U-F, set normal response mode
 			receive_sequence_number= send_sequence_number= 0; //init sequence numbers to zero
@@ -129,8 +150,11 @@ void hdlc_checkData() {  //What do I have to do?
 				hdlc_sendbuffer(STX, 1);
 				hdlc_sendbuffer(address, 0);
 				hdlc_sendbuffer(0xCE, 0); //UA
-				hdlc_sendbuffer(0x00, 0); //FCS!!
-				hdlc_sendbuffer(0x00, 0);
+					crc.Int= 0xffff;
+					crc.Int= crc_1021(crc.Int, address);
+					crc.Int= crc_1021(crc.Int, 0xCE);
+				hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+				hdlc_sendbuffer(crc.Char[1], 0);
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(ETX, 1);
 			}
@@ -143,8 +167,11 @@ void hdlc_checkData() {  //What do I have to do?
 				hdlc_sendbuffer(STX, 1);
 				hdlc_sendbuffer(address, 0);
 				hdlc_sendbuffer(0xCE, 0); //UA
-				hdlc_sendbuffer(0, 0); //FCS!!
-				hdlc_sendbuffer(0, 0);
+					crc.Int= 0xffff;
+					crc.Int= crc_1021(crc.Int, address);
+					crc.Int= crc_1021(crc.Int, 0xCE);
+				hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+				hdlc_sendbuffer(crc.Char[1], 0);
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(ETX, 1);
 			}
@@ -157,8 +184,11 @@ void hdlc_checkData() {  //What do I have to do?
 			hdlc_sendbuffer(STX, 1);
 			hdlc_sendbuffer(address, 0);
 			hdlc_sendbuffer(0xE9, 0); //FRMR
-			hdlc_sendbuffer(0, 0); //FCS!!
-			hdlc_sendbuffer(0, 0);
+				crc.Int= 0xffff;
+				crc.Int= crc_1021(crc.Int, address);
+				crc.Int= crc_1021(crc.Int, 0xE9);
+			hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+			hdlc_sendbuffer(crc.Char[1], 0);
 			hdlc_sendbuffer(DLE, 1);
 			hdlc_sendbuffer(ETX, 1);
 		}
@@ -175,14 +205,17 @@ void hdlc_checkData() {  //What do I have to do?
 				//Master received previous frame correct => drop send buffer
 				head= tail= 0u;
 				if ( (received_data[1]&0x08) == 0x08u) { //Receive Ready, used to poll for data
-					if (input_capt1() == 0u) { //No data => RR
+					if ( (tmp_capt1= input_capt1()) == 0u) { //No data => RR
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
 						hdlc_sendbuffer(address, 0);
-						tmp= receive_sequence_number;
-						hdlc_sendbuffer((0x88|tmp), 0); //RR: no data to transmit
-						hdlc_sendbuffer(0, 0); //FCS!!
-						hdlc_sendbuffer(0, 0);
+						tmp= 0x88|receive_sequence_number;
+						hdlc_sendbuffer(tmp, 0); //RR: no data to transmit
+							crc.Int= 0xffff;
+							crc.Int= crc_1021(crc.Int, address);
+							crc.Int= crc_1021(crc.Int, tmp);
+						hdlc_sendbuffer(crc.Char[0], 0);
+						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
 					} else { //Send Data => I-Frame
@@ -194,9 +227,15 @@ void hdlc_checkData() {  //What do I have to do?
 						send_sequence_number&= 0x07;
 						tmp|= receive_sequence_number;
 						tmp|= 0x08; //Poll-flag
-						hdlc_sendbuffer((0x7F&tmp), 0); //I-Frame
-						hdlc_sendbuffer(0, 0); //FCS!!
-						hdlc_sendbuffer(0, 0);
+						tmp= 0x7F&tmp;
+						hdlc_sendbuffer(tmp, 0); //I-Frame
+						hdlc_sendbuffer(tmp_capt1, 0); //Data to transmit
+							crc.Int= 0xffff;
+							crc.Int= crc_1021(crc.Int, address);
+							crc.Int= crc_1021(crc.Int, tmp);
+							crc.Int= crc_1021(crc.Int, tmp_capt1);
+						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
 					}
@@ -208,14 +247,18 @@ void hdlc_checkData() {  //What do I have to do?
 			if (send_sequence_number == (received_data[1]&0x07) ) { //Testing sequence numbers from master.
 				head= tail= 0; //reset buffer
 				if ( (received_data[1]&0x08) == 0x08u) { //Receive Ready, used to poll for data
-					if (input_capt1() == 0u) { //No data => RR
+					if ( (tmp_capt1= input_capt1()) == 0u) { //No data => RR
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
 						hdlc_sendbuffer(address, 0);
 						tmp= receive_sequence_number;
-						hdlc_sendbuffer((0x88|tmp), 0); //RR: no data to transmit
-						hdlc_sendbuffer(0, 0); //FCS!!
-						hdlc_sendbuffer(0, 0);
+						tmp= 0x88|tmp;
+						hdlc_sendbuffer(tmp, 0); //RR: no data to transmit
+							crc.Int= 0xffff;
+							crc.Int= crc_1021(crc.Int, address);
+							crc.Int= crc_1021(crc.Int, tmp);;
+						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
 					} else { //Send Data => I-Frame
@@ -227,7 +270,13 @@ void hdlc_checkData() {  //What do I have to do?
 						send_sequence_number&= 0x07;
 						tmp|= receive_sequence_number;
 						tmp|= 0x08; //Poll-flag
-						hdlc_sendbuffer((0x7F&tmp), 0); //I-Frame
+						tmp= 0x7F&tmp;
+						hdlc_sendbuffer(tmp, 0); //I-Frame
+						hdlc_sendbuffer(tmp_capt1, 0); //Data to transmit
+							crc.Int= 0xffff;
+							crc.Int= crc_1021(crc.Int, address);
+							crc.Int= crc_1021(crc.Int, tmp);
+							crc.Int= crc_1021(crc.Int, tmp_capt1);
 						hdlc_sendbuffer(0, 0); //FCS!!
 						hdlc_sendbuffer(0, 0);
 						hdlc_sendbuffer(DLE, 1);
@@ -249,14 +298,19 @@ void hdlc_checkData() {  //What do I have to do?
 			hdlc_sendbuffer(STX, 1);
 			hdlc_sendbuffer(address, 0);
 			hdlc_sendbuffer(0xF8, 0); //DM
-			hdlc_sendbuffer(0, 0); //FCS!!
-			hdlc_sendbuffer(0, 0);
+				crc.Int= 0xffff;
+				crc.Int= crc_1021(crc.Int, address);
+				crc.Int= crc_1021(crc.Int, 0xF8);
+			hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+			hdlc_sendbuffer(crc.Char[1], 0);
 			hdlc_sendbuffer(DLE, 1);
 			hdlc_sendbuffer(ETX, 1);
 		}	
 	}
 }
 
+//Parse incomming byte, search for start of frame and en of frame.
+//If found, parse frame
 void hdlc_receive(unsigned char received_byte) {
 	//Drop data => to many packets!
 	if (current_size >= 0x10u) { //Max size = 16 + 2. (2 from DLE & STX)
@@ -285,15 +339,12 @@ void hdlc_receive(unsigned char received_byte) {
 			control.DLE= 0u;
 		} else if (control.DLE == 1u && received_byte == ETX) { //End of frame found :):)
 			control.SYNC= 0u; //We have to resync
-			received_size= current_size - 2 ; //Remove DLE & ETX, unneeded!
+			received_size= current_size - 3; //Remove DLE & ETX, unneeded!
 			if (receiving_data[0] == address) {
-				hdlc_removeDLEs();
-				/*if (*(&received_data[received_size-1]) == crc16_calc(received_data, received_size)) {
-					hdlc_checkData;
-				} else {
-					//Send S-Frame if address is correct, wrong CRC, and P bit=1 => REJ
-				}*/
-				hdlc_checkData();
+				hdlc_checkFrame();
+				if ( (received_data[received_size-1] == crc.Char[0]) && (received_data[received_size] == crc.Char[1]) ) {
+					hdlc_parseFrame();
+				}
 			}
 		} else {
 			control.DLE= 0u;
@@ -301,14 +352,21 @@ void hdlc_receive(unsigned char received_byte) {
 	}
 }
 
-void hdlc_removeDLEs() {
+
+//Remove dupplicate DLE's from frame, and calculate CRC
+void hdlc_checkFrame() {
 	unsigned int i, offset;
 	offset= 0;
-	for (i=0; i < received_size; i++) {
+	crc.Int= 0xffff;
+	
+	for (i=0; i <= received_size; i++) {
 		if (receiving_data[i] == DLE && receiving_data[i+1] == DLE) { // If DLE, skip one place
 			i++; offset++;
 		}
 		received_data[i-offset]= receiving_data[i];
+		if ( (received_size-2) >= i) {
+			crc.Int= crc_1021(crc.Int, receiving_data[i]);
+		}
 	}
 	received_size-= offset; //Set receiving_size to correct site.
 }

@@ -11,7 +11,7 @@
 //Init
 void hdlc_init(void);
 
-//Set and read the address of this device
+//Read, and set the address of this device + write to EEPROM
 char hdlc_getAddress(void);
 void hdlc_setAddress(char new_address);
 

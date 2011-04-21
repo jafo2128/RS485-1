@@ -1,52 +1,23 @@
-#include "crc16.h"
+//http://www.dattalo.com/technical/software/pic/crc_1021.asm
 
-#define polynoom 0x1021
+// Digital Nemesis Pty Ltd
+// www.digitalnemesis.com
+// ash@digitalnemesis.com
 
-unsigned int crc, i, j, tmp1, tmp2, bits;
-char valid;
+// Original Code: Ashley Roll
+// Optimisations: Scott Dattalo
 
-int crc16_calc (unsigned char data[], unsigned int size) {
-	//number of bits
-	bits= size*8-16;
+int x;
+int calc_crc;
+
+int crc_1021(int old_crc, char data) {
 	
-	
-	tmp1= tmp2= 0;
-	for ( i=0; i<size; i++) {
-		//Exor data
-		if ((data[0]&0x80) != (unsigned)0) {
-			tmp1= *(&data[0]);
-			tmp1^=polynoom;
-		}
-		
-		//shift data
-		for (j=size-1; j >= (unsigned)0; j--) {
-			
-			tmp2 = tmp1;
-			
-			//Test for cary
-			if (data[0]&0x80 != (unsigned)0) {
-				tmp1=1;
-			} else {
-				tmp1=0;
-			}		
-			
-			data[j] == data[j]<<1;
-			
-			//Insert previous cary
-			if (tmp2 != (unsigned)0) {
-				data[j]|= 0x01;	
-			}	
-		}	
-		
-	}
-	
-	
-	//Test if valid CRC
-	if (crc == *(&data[0])) {
-		valid= 0xff;
-	} else {
-		valid= 0x00;
-	}
-	
-	return *(&data[0]);
-}	
+  x = ((old_crc>>8) ^ data) & 0xff;
+  x ^= x>>4;
+
+  calc_crc = (old_crc << 8) ^ (x << 12) ^ (x <<5) ^ x;
+
+  calc_crc &= 0xffff;
+
+  return calc_crc;
+}

@@ -43,7 +43,7 @@ void main (void)
 	//Enable global interrupts: High priority: 0008h, Low priority: 0018h
 	RCONbits.IPEN= 0;
 	INTCONbits.PEIE= 1;
-	INTCONbits.GIE= 0;
+	INTCONbits.GIE= 1;
 	
 	//Main loop	
 	while (1) {

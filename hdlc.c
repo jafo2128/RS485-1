@@ -113,7 +113,7 @@ void hdlc_setAddress(char new_address) {
 }
 
 
-//If transmission buffer is not full and we have something to transmit, transmit itS
+//If transmission buffer is not full and we have something to transmit, transmit it.
 void hdlc_transmit() {
 	if ( (TXSTA1bits.TRMT == 1u) && (head != tail) ) { //If transmit buffer empty and something to send
 		PORTC|= 0x30; //Transmit enable, receive disable
@@ -137,7 +137,7 @@ void hdlc_sendbuffer(unsigned char data, char headers) {
 	}
 }
 
-//Parse incomming data and act accordingly
+//Parse incomming data and act accordingly.
 void hdlc_parseFrame() {  //What do I have to do?
 	if ( (received_data[1]&0xC0) == 0xC0u) { //Unnumbered Frame
 		if ( (received_data[1]&0x37) == 0x01u) { //U-F, set normal response mode
@@ -177,7 +177,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 			}
 		} else if ((received_data[1]&0x37) == 0x06u) { //U-F, ACK
 			//Do nothing
-		} else if ( (received_data[1]&0x08) == 0x08u) { //Unknown, poll-flag, ask to connect
+		} else if ( (received_data[1]&0x08) == 0x08u) { //Unknown, poll-flag, Frame reject
 			//Send FRMR
 			head= tail= 0;
 			hdlc_sendbuffer(DLE, 1);
@@ -277,8 +277,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 							crc.Int= crc_1021(crc.Int, address);
 							crc.Int= crc_1021(crc.Int, tmp);
 							crc.Int= crc_1021(crc.Int, tmp_capt1);
-						hdlc_sendbuffer(0, 0); //FCS!!
-						hdlc_sendbuffer(0, 0);
+						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
 					}
@@ -305,11 +305,11 @@ void hdlc_parseFrame() {  //What do I have to do?
 			hdlc_sendbuffer(crc.Char[1], 0);
 			hdlc_sendbuffer(DLE, 1);
 			hdlc_sendbuffer(ETX, 1);
-		}	
+		}
 	}
 }
 
-//Parse incomming byte, search for start of frame and en of frame.
+//Parse incomming byte, search for start of frame and end of frame.
 //If found, parse frame
 void hdlc_receive(unsigned char received_byte) {
 	//Drop data => to many packets!
@@ -353,7 +353,7 @@ void hdlc_receive(unsigned char received_byte) {
 }
 
 
-//Remove dupplicate DLE's from frame, and calculate CRC
+//Remove dupplicate DLE's from frame, and calculate CRC.
 void hdlc_checkFrame() {
 	unsigned int i, offset;
 	offset= 0;

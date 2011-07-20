@@ -5,7 +5,6 @@ const unsigned char DLE= 0x10;
 const unsigned char STX= 0x02;
 const unsigned char ETX= 0x03;
 
-
 //used as boolean
 typedef union {
 	unsigned char byte;
@@ -74,6 +73,10 @@ void hdlc_init() {
 	//Set up Receive-/Transmit enable pins, as output
 	TRISC&= 0b11001111;
 	PORTC&= 0xCF; //Transmit enable, receive disable
+	
+	//Set up RS485 output led
+	TRISD&= 0b11110111;
+	LATD&=0xF7; //Disable led
 	
 	//Enable UART interrupts
 	//PIE1bits.RC1IE= 1;
@@ -313,7 +316,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 //If found, parse frame
 void hdlc_receive(unsigned char received_byte) {
 	//Drop data => to many packets!
-	if (current_size >= 0x10u) { //Max size = 16 + 2. (2 from DLE & STX)
+	if (current_size >= 0x10u) { //Max size = 16 + 2. (2 from DLE & ETX)
 		control.SYNC= 0u;
 		control.DLE= 0u;
 	}
@@ -338,6 +341,7 @@ void hdlc_receive(unsigned char received_byte) {
 			current_size= 0u;
 			control.DLE= 0u;
 		} else if (control.DLE == 1u && received_byte == ETX) { //End of frame found :):)
+			LATD|=0x08; //Enable LED
 			control.SYNC= 0u; //We have to resync
 			received_size= current_size - 3; //Remove DLE & ETX, unneeded!
 			if (receiving_data[0] == address) {
@@ -346,6 +350,7 @@ void hdlc_receive(unsigned char received_byte) {
 					hdlc_parseFrame();
 				}
 			}
+			LATD&=0xF7; //Disable LED
 		} else {
 			control.DLE= 0u;
 		}

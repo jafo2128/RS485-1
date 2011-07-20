@@ -1,7 +1,7 @@
 #ifndef DISP
 #define DISP
 
-#include <p18f25k22.h>
+#include <p18f45k22.h>
 #include "hdlc.h"
 
 //Public function declaration

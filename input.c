@@ -1,6 +1,9 @@
 #include "input.h"
 
-//Private variable declaration
+//Defines
+#define BTN_INC PORTCbits.RC0
+#define BTN_DEC PORTAbits.RA6
+#define CAPT1	PORTCbits.RC1
 
 //Counter for delay's
 unsigned char cnt1, cnt2, cnt3;
@@ -27,14 +30,11 @@ bits input;
 
 void input_init() {
 	
-	//RC2, RC3 as input.
-	TRISC|= 0b000001100;
-	ANSELC&= 0b11110011;
-	
-	//RB0 as input
-	TRISB|= 0b00000001;
-	ANSELB&= 0b11111110;
-	
+	//RC0, RA6 as input for buttons; RC1 as input for pulse
+	TRISC|= 0b00000011;
+	ANSELC&= 0b11111100;
+	TRISA|= 0b01000000;
+	ANSELA&=0b10111111;
 	
 	//Set default values
 	input.btn_dec= input.btn_inc= input.btn_ignore= 0;
@@ -45,11 +45,11 @@ void input_init() {
 void input_loop() {
 	
 	//Button decrement
-	if ( input.btn_dec == 0u && PORTCbits.RC2 == 1u && cnt1 == 0u) {
+	if ( input.btn_dec == 0u && BTN_DEC == 1u && cnt1 == 0u) {
 		cnt1= 100;
 		input.btn_dec= 1u;
 		display_on(); //Show current address
-	} else 	if (input.btn_dec == 1u && PORTCbits.RC2 == 0u && cnt1 == 0u) {
+	} else 	if (input.btn_dec == 1u && BTN_DEC == 0u && cnt1 == 0u) {
 		cnt1= 100;
 		input.btn_dec= 0u;
 		delay_unlock= 0u; //Reset unlocking time
@@ -64,11 +64,11 @@ void input_loop() {
 		}
 	}
 	//Button increment
-	if ( input.btn_inc == 0u && PORTCbits.RC3 == 1u && cnt2 == 0u) {
+	if ( input.btn_inc == 0u && BTN_INC == 1u && cnt2 == 0u) {
 		cnt2= 100;
 		input.btn_inc= 1u;
 		display_on(); //Show current address
-	} else if (input.btn_inc == 1u && PORTCbits.RC3 == 0u && cnt2 == 0u) {
+	} else if (input.btn_inc == 1u && BTN_INC == 0u && cnt2 == 0u) {
 		cnt2= 100;
 		input.btn_inc= 0u;
 		delay_unlock= 0u; //Reset unlocking time
@@ -83,10 +83,10 @@ void input_loop() {
 		}
 	}
 	//Input capture
-	if ( input.capt1 == 0u && PORTBbits.RB0 == 1u && cnt3 == 0u) {
+	if ( input.capt1 == 0u && CAPT1 == 1u && cnt3 == 0u) {
 		cnt3= 100;
 		input.capt1= 1u;
-	} else if (input.capt1 == 1u && PORTBbits.RB0 == 0u && cnt3 == 0u) {
+	} else if (input.capt1 == 1u && CAPT1 == 0u && cnt3 == 0u) {
 		cnt3= 100;
 		input.capt1= 0u;
 		capt1++;
@@ -94,7 +94,7 @@ void input_loop() {
 		display_show(capt1);
 	}
 	//both switches pressed
-	if (PORTCbits.RC2 == 1u && PORTCbits.RC3 == 1u) {
+	if (BTN_INC == 1u && BTN_DEC == 1u) {
 		if (cnt1 == 0u && cnt2 == 0u && delay_unlock == 0u) {
 			delay_unlock= 2000;
 		}
@@ -106,7 +106,7 @@ void input_loop() {
 	}
 	
 	//Display on
-	if ( PORTCbits.RC2 == 1u || PORTCbits.RC3 == 1u) {
+	if ( BTN_INC == 1u || BTN_DEC == 1u) {
 		delay_off= 3000;
 	}
 	

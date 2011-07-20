@@ -1,4 +1,4 @@
-#include <p18f25k22.h>
+#include <p18f45k22.h>
 
 //Configurations
 //Oscillator

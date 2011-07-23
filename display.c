@@ -8,9 +8,7 @@ char port;
 void display_init() {
 	//Set port B/D as output (=0)
 	TRISB&= 0b11110000;
-	ANSELB&=0b00001111;
 	TRISD&= 0b00001111;
-	ANSELD&=0b11110000;
 
 	//Read EEPROM
 	value= hdlc_getAddress();
@@ -44,9 +42,9 @@ void display_show(char disp_value) {
 	
 	//shift bits in to correct position and send to BCD-to-7seg
 	port= (buffer[1]&0x1) | (buffer[1]&0x2)<<2 | (buffer[1]&0x4) | (buffer[1]&0x8)>>2;
-	LATB= (PORTB&0xF0)|port;
+	LATB= (LATB&0xF0)|port;
 	port= (buffer[0]&0x1)<<4 | (buffer[0]&0x2)<<6 | (buffer[0]&0x4)<<4 | (buffer[0]&0x8)<<2;
-	LATD= (PORTD&0xF0)|port;
+	LATD= (LATD&0x0F)|port;
 }
 
 void display_lock() {

@@ -11,7 +11,7 @@
 //#include <stdio.h>
 
 //Include project library's
-#include "input.h"
+#include "io.h"
 #include "display.h"
 #include "hdlc.h"
 #include "CRC16.h"
@@ -36,7 +36,7 @@ void main (void)
 	
 	
 	//Init library's
-	input_init();
+	io_init();
 	hdlc_init();
 	display_init(); //After hdlc_init, otherwise wrong address. Maybe working with poiters??
 	
@@ -47,7 +47,7 @@ void main (void)
 	
 	//Main loop	
 	while (1) {
-		input_loop();
+		io_loop();
 		while (PIR1bits.RC1IF) {
 			hdlc_receive(RCREG1);
 		}
@@ -75,7 +75,7 @@ void InterruptVectorHigh (void) {
 void InterruptHandlerHigh () {
 	if (PIR1bits.TMR2IF) { //check for TMR2 match                                   
 			PIR1bits.TMR2IF= 0;            //clear interrupt flag
-			input_cnt_int();
+			io_cnt_int();
 	}
 	
 	/*if (PIR1bits.RC1IF) { //check for UART1 receive

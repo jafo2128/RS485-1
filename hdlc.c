@@ -38,6 +38,8 @@ unsigned char head, tail;
 unsigned char tmp;
 //Temp variable for capt1
 unsigned char tmp_capt1;
+//Temp variable for input
+unsigned char tmp_input;
 
 //For int to char
 typedef union combo {
@@ -72,7 +74,7 @@ void hdlc_init() {
 	
 	//Set up Receive-/Transmit enable pins, as output
 	TRISC&= 0b11001111;
-	PORTC&= 0xCF; //Transmit enable, receive disable
+	LATC&= 0xCF; //Transmit enable, receive disable
 	
 	//Set up RS485 output led
 	TRISD&= 0b11110111;
@@ -197,18 +199,73 @@ void hdlc_parseFrame() {  //What do I have to do?
 		}
 	} else if (control.NRM == 1u) { //A connection is alive
 		//Check frame type's
-		if ( (received_data[1]&0x80) == 0x00u) { //Information Frame
+		if ( (received_data[1]&0x80) == 0x00u) { //Information Frame, can have data!
 			if (receive_sequence_number == ((received_data[1] & 0x70)>>4) ) {//Correct send number received?
 				//We received everything from master, so tell him that. (Master: drop send buffer)
 				receive_sequence_number++;
 				receive_sequence_number&= 0x07;
+				
+				//Do we have data in the frame?
+				if (received_size > 1u) {
+					if ( (received_data[2] & 0x02) > 0u) { //Update output 2
+						io_enableOutput(2);
+					} else {
+						io_disableOutput(2);
+					}
+					
+					if ( (received_data[2] & 0x01) > 0u) { //Update output 1
+						io_enableOutput(1);
+					} else {
+						io_disableOutput(1);
+					}	
+				}	
 			}
 			
 			if (send_sequence_number == (received_data[1]&0x07) ) { //Correct receive number?
 				//Master received previous frame correct => drop send buffer
 				head= tail= 0u;
 				if ( (received_data[1]&0x08) == 0x08u) { //Receive Ready, used to poll for data
-					if ( (tmp_capt1= input_capt1()) == 0u) { //No data => RR
+					if ( (tmp_capt1= io_capt1()) > 0u) { //Send puls data => I-Frame
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(STX, 1);
+						hdlc_sendbuffer(address, 0);
+						tmp= send_sequence_number<<4;
+						send_sequence_number++;
+						send_sequence_number&= 0x07;
+						tmp|= receive_sequence_number;
+						tmp|= 0x08; //Poll-flag
+						tmp= 0x7F&tmp;
+						hdlc_sendbuffer(tmp, 0); //I-Frame
+						hdlc_sendbuffer(tmp_capt1, 0); //Data to transmit
+							crc.Int= 0xffff;
+							crc.Int= crc_1021(crc.Int, address);
+							crc.Int= crc_1021(crc.Int, tmp);
+							crc.Int= crc_1021(crc.Int, tmp_capt1);
+						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+						hdlc_sendbuffer(crc.Char[1], 0);
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(ETX, 1);
+					} else if ((tmp_input= io_getInputs()) > 0u) { //Send input data => I-frame
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(STX, 1);
+						hdlc_sendbuffer(address, 0);
+						tmp= send_sequence_number<<4;
+						send_sequence_number++;
+						send_sequence_number&= 0x07;
+						tmp|= receive_sequence_number;
+						tmp|= 0x08; //Poll-flag
+						tmp= 0x7F&tmp;
+						hdlc_sendbuffer(tmp, 0); //I-Frame
+						hdlc_sendbuffer(tmp_input, 0); //Data to transmit
+							crc.Int= 0xffff;
+							crc.Int= crc_1021(crc.Int, address);
+							crc.Int= crc_1021(crc.Int, tmp);
+							crc.Int= crc_1021(crc.Int, tmp_capt1);
+						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+						hdlc_sendbuffer(crc.Char[1], 0);
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(ETX, 1);
+					} else { //No data => RR
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
 						hdlc_sendbuffer(address, 0);
@@ -221,50 +278,18 @@ void hdlc_parseFrame() {  //What do I have to do?
 						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
-					} else { //Send Data => I-Frame
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(STX, 1);
-						hdlc_sendbuffer(address, 0);
-						tmp= send_sequence_number<<4;
-						send_sequence_number++;
-						send_sequence_number&= 0x07;
-						tmp|= receive_sequence_number;
-						tmp|= 0x08; //Poll-flag
-						tmp= 0x7F&tmp;
-						hdlc_sendbuffer(tmp, 0); //I-Frame
-						hdlc_sendbuffer(tmp_capt1, 0); //Data to transmit
-							crc.Int= 0xffff;
-							crc.Int= crc_1021(crc.Int, address);
-							crc.Int= crc_1021(crc.Int, tmp);
-							crc.Int= crc_1021(crc.Int, tmp_capt1);
-						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
-						hdlc_sendbuffer(crc.Char[1], 0);
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(ETX, 1);
 					}
 				}
 			} else { //Resend buffer
-				tail= 0u;
+				if ( (received_data[1]&0x08) == 0x08u) {
+					tail= 0;
+				}
 			}
 		} else if ( (received_data[1]&0xC0) == 0x80u) { //Supervisory Frame
 			if (send_sequence_number == (received_data[1]&0x07) ) { //Testing sequence numbers from master.
 				head= tail= 0; //reset buffer
 				if ( (received_data[1]&0x08) == 0x08u) { //Receive Ready, used to poll for data
-					if ( (tmp_capt1= input_capt1()) == 0u) { //No data => RR
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(STX, 1);
-						hdlc_sendbuffer(address, 0);
-						tmp= receive_sequence_number;
-						tmp= 0x88|tmp;
-						hdlc_sendbuffer(tmp, 0); //RR: no data to transmit
-							crc.Int= 0xffff;
-							crc.Int= crc_1021(crc.Int, address);
-							crc.Int= crc_1021(crc.Int, tmp);;
-						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
-						hdlc_sendbuffer(crc.Char[1], 0);
-						hdlc_sendbuffer(DLE, 1);
-						hdlc_sendbuffer(ETX, 1);
-					} else { //Send Data => I-Frame
+					if ( (tmp_capt1= io_capt1()) > 0u) { //Send puls data => I-Frame
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
 						hdlc_sendbuffer(address, 0);
@@ -284,10 +309,42 @@ void hdlc_parseFrame() {  //What do I have to do?
 						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
+					} else if ((tmp_input= io_getInputs()) > 0u) { //Send input data => I-frame
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(STX, 1);
+						hdlc_sendbuffer(address, 0);
+						tmp= send_sequence_number<<4;
+						send_sequence_number++;
+						send_sequence_number&= 0x07;
+						tmp|= receive_sequence_number;
+						tmp|= 0x08; //Poll-flag
+						tmp= 0x7F&tmp;
+						hdlc_sendbuffer(tmp, 0); //I-Frame
+						hdlc_sendbuffer(tmp_input, 0); //Data to transmit
+							crc.Int= 0xffff;
+							crc.Int= crc_1021(crc.Int, address);
+							crc.Int= crc_1021(crc.Int, tmp);
+							crc.Int= crc_1021(crc.Int, tmp_capt1);
+						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
+						hdlc_sendbuffer(crc.Char[1], 0);
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(ETX, 1);
+					} else { //No data => RR
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(STX, 1);
+						hdlc_sendbuffer(address, 0);
+						tmp= 0x88|receive_sequence_number;
+						hdlc_sendbuffer(tmp, 0); //RR: no data to transmit
+							crc.Int= 0xffff;
+							crc.Int= crc_1021(crc.Int, address);
+							crc.Int= crc_1021(crc.Int, tmp);
+						hdlc_sendbuffer(crc.Char[0], 0);
+						hdlc_sendbuffer(crc.Char[1], 0);
+						hdlc_sendbuffer(DLE, 1);
+						hdlc_sendbuffer(ETX, 1);
 					}
 				}
-			} else  {
-				//Resend buffer!!
+			} else  { //Resend buffer!!
 				if ( (received_data[1]&0x08) == 0x08u) {
 					tail= 0;
 				}
@@ -364,14 +421,20 @@ void hdlc_checkFrame() {
 	offset= 0;
 	crc.Int= 0xffff;
 	
+	
+	//Remove double DLE's
 	for (i=0; i <= received_size; i++) {
 		if (receiving_data[i] == DLE && receiving_data[i+1] == DLE) { // If DLE, skip one place
 			i++; offset++;
 		}
 		received_data[i-offset]= receiving_data[i];
-		if ( (received_size-2) >= i) {
-			crc.Int= crc_1021(crc.Int, receiving_data[i]);
-		}
 	}
-	received_size-= offset; //Set receiving_size to correct site.
+	
+	//Set receiving_size to correct site.
+	received_size-= offset;
+	
+	//Calculate CRC
+	for (i=0; i <= received_size-2; i++) {
+		crc.Int= crc_1021(crc.Int, receiving_data[i]);
+	}	
 }

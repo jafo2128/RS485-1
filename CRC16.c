@@ -7,6 +7,8 @@
 // Original Code: Ashley Roll
 // Optimisations: Scott Dattalo
 
+#include "CRC16.h"
+
 int x;
 int calc_crc;
 

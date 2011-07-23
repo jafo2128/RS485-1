@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 //Private variable declaration
-char value, idle_timer, locked;
+unsigned char value, idle_timer, locked, status;
 char port;
 
 void display_init() {
@@ -14,16 +14,17 @@ void display_init() {
 	value= hdlc_getAddress();
 	idle_timer= 0;
 	locked= 0xff;
+	status= 0x00;
 	
 	display_show(0xff);
 }	
 
-void display_show(char disp_value) {
+void display_show(unsigned char disp_value) {
 	char buffer[4];	
 	
-	if (disp_value != 0xff) {
+	if (disp_value != 0xffu) {
 		//convert to ASCII and convert to binary
-		btoa(disp_value,buffer);
+		itoa(buffer, disp_value, 10);
 		if (buffer[1] >= 0x30 && buffer[1]  <= 0x39) {//Valid ASCII charter: 0-9
 			buffer[2]= buffer[0]; //Switching places for btoa
 			buffer[0]= buffer[1]-0x30; //ASCII to binary
@@ -31,9 +32,9 @@ void display_show(char disp_value) {
 		} else {
 			buffer[1]= 0xff; //Hide leading zero
 			if (buffer[0] >= 0x30 && buffer[0]  <= 0x39) { //Valid ASCII charter
-				buffer[1]-= 0x30;
+				buffer[0]-= 0x30;
 			} else {
-				buffer[1]= 0;
+				buffer[0]= 0;
 			}
 		}
 	} else {
@@ -48,15 +49,19 @@ void display_show(char disp_value) {
 }
 
 void display_lock() {
-	locked= 0xff;
-	
-	//Everything above 9 = off.
-	display_show(255);
-	
-	//Write new address to EEPROM, only if changed
-	if (value != hdlc_getAddress()) {
-		hdlc_setAddress(value);
-	}
+	if (status == 0xffu)	{
+		locked= 0xff;
+		status= 0x00;
+		
+		//Everything above 9 = off.
+		display_show(255);
+		
+		//Write new address to EEPROM, only if changed
+		if (value != hdlc_getAddress()) {
+			io_control_rs485_reset();
+			hdlc_setAddress(value);
+		}
+	}	
 }
 	
 void display_unlock() {
@@ -65,17 +70,18 @@ void display_unlock() {
 
 void display_on() {
 	display_show(value);
+	status= 0xff;
 }	
 
 void display_inc() {
-	if (locked == 0x00 && value < 32) {
-		value++;
-	}
+	if (locked == 0x00u && value++ >= 64u) {
+		value= 1;
+	}		
 	display_show(value);
 }
 
 void display_dec() {
-	if (locked == 0x00 && value > 0) {
+	if (locked == 0x00u && value > 0u) {
 		value--;
 	}
 	display_show(value);

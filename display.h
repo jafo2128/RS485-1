@@ -1,8 +1,9 @@
 #ifndef DISP
 #define DISP
 
-#include <p18f45k22.h>
+//#include <p18f45k22.h>
 #include "hdlc.h"
+#include "io.h"
 
 //Public function declaration
 
@@ -13,7 +14,7 @@ void display_init(void);
 void display_on(void);
 
 //Display a value
-void display_show(char disp_value);
+void display_show(unsigned char disp_value);
 
 //Lock & Unlock change of value and display on/off
 void display_lock(void);

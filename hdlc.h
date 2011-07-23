@@ -3,7 +3,8 @@
 
 #include "CRC16.h"
 #include "io.h"
-#include <p18f45k22.h>
+//#include <p18f45k22.h>
+#include <htc.h>
 
 
 //Public function declaration
@@ -12,7 +13,7 @@
 void hdlc_init(void);
 
 //Read, and set the address of this device + write to EEPROM
-char hdlc_getAddress(void);
+unsigned char hdlc_getAddress(void);
 void hdlc_setAddress(char new_address);
 
 //Read and Write data from UART

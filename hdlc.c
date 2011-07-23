@@ -21,8 +21,14 @@ typedef union {
 } bits;
 bits control;
 
+//For int to char
+typedef union combo {
+	unsigned int Int;	   
+	unsigned char Char[2];	   
+} Tcombo;
+
 //Receiving charters
-unsigned int current_size, received_size, cnt; //Counters
+unsigned char current_size, received_size, cnt; //Counters
 unsigned char address;	//Address of slave
 unsigned char receiving_data[0x10]; //Buffer for receiving data
 unsigned char received_data[0x10]; //Same as receiving buffer, maybe remove??
@@ -39,13 +45,7 @@ unsigned char tmp;
 //Temp variable for capt1
 unsigned char tmp_capt1;
 //Temp variable for input
-unsigned char tmp_input;
-
-//For int to char
-typedef union combo {
-	int Int;	   
-	unsigned char Char[2];	   
-} Tcombo;
+Tcombo tmp_input;
 
 Tcombo crc;
 
@@ -85,7 +85,8 @@ void hdlc_init() {
 	
 	//Set up UART
 	BAUDCON1bits.BRG16= 0; //Timer in 8 bit mode
-	SPBRG1= 0x19;// =25 => 9600 boud.
+	//SPBRG1= 0x19;// =25 => 9600 baud.
+	SPBRG1= 0x17; // =23 => 10417 baud
 	TXSTA1bits.TX9= 0; //8bit transmission
 	TXSTA1bits.SYNC= 0; //Asynchronous mode
 	TXSTA1bits.BRGH= 0; //Timer in 8 bit mode
@@ -96,7 +97,7 @@ void hdlc_init() {
 }
 
 //Get current address of slave
-char hdlc_getAddress() {
+unsigned char hdlc_getAddress() {
 	return address;
 }
 
@@ -120,12 +121,13 @@ void hdlc_setAddress(char new_address) {
 
 //If transmission buffer is not full and we have something to transmit, transmit it.
 void hdlc_transmit() {
-	if ( (TXSTA1bits.TRMT == 1u) && (head != tail) ) { //If transmit buffer empty and something to send
+	//For polling use: (TXSTA1bits.TRMT == 1u)
+	if ( (head != tail) ) { //If transmit buffer empty and something to send
 		PORTC|= 0x30; //Transmit enable, receive disable
 		TXREG1= transmit_buffer[tail]; //Send tail
 		tail++;
-	} else if (TXSTA1bits.TRMT == 1u) { //Disable transmitter after last byte.
-		PORTC&= 0xCF; //Disable transmit, enable receive
+	} else {
+		PIE1bits.TX1IE= 0; //Disable transmit interrupts!
 	}
 }
 
@@ -153,6 +155,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 				head= tail= 0; //reset buffer
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(STX, 1);
+				PIE1bits.TX1IE= 1; //Enable interrupts!
 				hdlc_sendbuffer(address, 0);
 				hdlc_sendbuffer(0xCE, 0); //UA
 					crc.Int= 0xffff;
@@ -170,6 +173,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 				head= tail= 0; //reset buffer
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(STX, 1);
+				PIE1bits.TX1IE= 1; //Enable interrupts!
 				hdlc_sendbuffer(address, 0);
 				hdlc_sendbuffer(0xCE, 0); //UA
 					crc.Int= 0xffff;
@@ -187,6 +191,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 			head= tail= 0;
 			hdlc_sendbuffer(DLE, 1);
 			hdlc_sendbuffer(STX, 1);
+			PIE1bits.TX1IE= 1; //Enable interrupts!
 			hdlc_sendbuffer(address, 0);
 			hdlc_sendbuffer(0xE9, 0); //FRMR
 				crc.Int= 0xffff;
@@ -207,7 +212,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 				
 				//Do we have data in the frame?
 				if (received_size > 1u) {
-					if ( (received_data[2] & 0x02) > 0u) { //Update output 2
+					if ( (received_data[2] & 0x02) > 0) { //Update output 2
 						io_enableOutput(2);
 					} else {
 						io_disableOutput(2);
@@ -228,6 +233,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 					if ( (tmp_capt1= io_capt1()) > 0u) { //Send puls data => I-Frame
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
 						tmp= send_sequence_number<<4;
 						send_sequence_number++;
@@ -245,9 +251,10 @@ void hdlc_parseFrame() {  //What do I have to do?
 						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
-					} else if ((tmp_input= io_getInputs()) > 0u) { //Send input data => I-frame
+					} else if ((tmp_input.Int= io_getInputs()) > 0u) { //Send input data => I-frame
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
 						tmp= send_sequence_number<<4;
 						send_sequence_number++;
@@ -256,11 +263,13 @@ void hdlc_parseFrame() {  //What do I have to do?
 						tmp|= 0x08; //Poll-flag
 						tmp= 0x7F&tmp;
 						hdlc_sendbuffer(tmp, 0); //I-Frame
-						hdlc_sendbuffer(tmp_input, 0); //Data to transmit
+						hdlc_sendbuffer(tmp_input.Char[0], 0); //Data to transmit
+						hdlc_sendbuffer(tmp_input.Char[1], 0);
 							crc.Int= 0xffff;
 							crc.Int= crc_1021(crc.Int, address);
 							crc.Int= crc_1021(crc.Int, tmp);
-							crc.Int= crc_1021(crc.Int, tmp_capt1);
+							crc.Int= crc_1021(crc.Int, tmp_input.Char[0]);
+							crc.Int= crc_1021(crc.Int, tmp_input.Char[1]);
 						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
 						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
@@ -268,6 +277,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 					} else { //No data => RR
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
 						tmp= 0x88|receive_sequence_number;
 						hdlc_sendbuffer(tmp, 0); //RR: no data to transmit
@@ -292,6 +302,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 					if ( (tmp_capt1= io_capt1()) > 0u) { //Send puls data => I-Frame
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
 						tmp= send_sequence_number<<4;
 						send_sequence_number++;
@@ -309,9 +320,10 @@ void hdlc_parseFrame() {  //What do I have to do?
 						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(ETX, 1);
-					} else if ((tmp_input= io_getInputs()) > 0u) { //Send input data => I-frame
+					} else if ((tmp_input.Int= io_getInputs()) > 0u) { //Send input data => I-frame
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
 						tmp= send_sequence_number<<4;
 						send_sequence_number++;
@@ -320,11 +332,13 @@ void hdlc_parseFrame() {  //What do I have to do?
 						tmp|= 0x08; //Poll-flag
 						tmp= 0x7F&tmp;
 						hdlc_sendbuffer(tmp, 0); //I-Frame
-						hdlc_sendbuffer(tmp_input, 0); //Data to transmit
+						hdlc_sendbuffer(tmp_input.Char[0], 0); //Data to transmit
+						hdlc_sendbuffer(tmp_input.Char[1], 0);
 							crc.Int= 0xffff;
 							crc.Int= crc_1021(crc.Int, address);
 							crc.Int= crc_1021(crc.Int, tmp);
-							crc.Int= crc_1021(crc.Int, tmp_capt1);
+							crc.Int= crc_1021(crc.Int, tmp_input.Char[0]);
+							crc.Int= crc_1021(crc.Int, tmp_input.Char[1]);
 						hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
 						hdlc_sendbuffer(crc.Char[1], 0);
 						hdlc_sendbuffer(DLE, 1);
@@ -332,6 +346,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 					} else { //No data => RR
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
 						tmp= 0x88|receive_sequence_number;
 						hdlc_sendbuffer(tmp, 0); //RR: no data to transmit
@@ -356,6 +371,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 			head= tail= 0;
 			hdlc_sendbuffer(DLE, 1);
 			hdlc_sendbuffer(STX, 1);
+			PIE1bits.TX1IE= 1; //Enable interrupts!
 			hdlc_sendbuffer(address, 0);
 			hdlc_sendbuffer(0xF8, 0); //DM
 				crc.Int= 0xffff;
@@ -376,6 +392,7 @@ void hdlc_receive(unsigned char received_byte) {
 	if (current_size >= 0x10u) { //Max size = 16 + 2. (2 from DLE & ETX)
 		control.SYNC= 0u;
 		control.DLE= 0u;
+		current_size= 0u;
 	}
 	
 	//Waiting on Start of frame: DLE & STX
@@ -392,22 +409,23 @@ void hdlc_receive(unsigned char received_byte) {
 		receiving_data[current_size]= received_byte;
 		current_size++;
 		
-		//Testing for invalid start of frame
-		if (received_byte == DLE) {control.DLE= !control.DLE;}
-		else if (control.DLE == 1u && received_byte == STX) { //Reset was invalid start of frame!
-			current_size= 0u;
-			control.DLE= 0u;
-		} else if (control.DLE == 1u && received_byte == ETX) { //End of frame found :):)
-			LATD|=0x08; //Enable LED
-			control.SYNC= 0u; //We have to resync
+		//End of frame found :):)
+		if (control.DLE == 1u && received_byte == ETX) {
+			io_control_rs485(0); //Enable the led to show we receive some data
 			received_size= current_size - 3; //Remove DLE & ETX, unneeded!
 			if (receiving_data[0] == address) {
 				hdlc_checkFrame();
 				if ( (received_data[received_size-1] == crc.Char[0]) && (received_data[received_size] == crc.Char[1]) ) {
 					hdlc_parseFrame();
+					io_control_rs485(1); //Let the LED blink!
 				}
 			}
-			LATD&=0xF7; //Disable LED
+			control.SYNC= 0u; //We have to resync
+		} else if (control.DLE == 1u && received_byte == STX) { //Reset was invalid start of frame!
+			current_size= 0u;
+			control.DLE= 0u;
+		} if (received_byte == DLE) { //Testing for invalid start of frame
+			control.DLE= !control.DLE;
 		} else {
 			control.DLE= 0u;
 		}

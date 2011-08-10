@@ -5,6 +5,9 @@
 unsigned char value, idle_timer, locked, status;
 char port;
 
+//For display
+char buffer[4];
+
 void display_init() {
 	//Set port B/D as output (=0)
 	TRISB&= 0b11110000;
@@ -16,11 +19,13 @@ void display_init() {
 	locked= 0xff;
 	status= 0x00;
 	
+	//Reset variables
+	buffer[0]= buffer[1]= buffer[2]= buffer[3]= 0;
+	
 	display_show(0xff);
 }	
 
-void display_show(unsigned char disp_value) {
-	char buffer[4];	
+void display_show(unsigned char disp_value) {	
 	
 	if (disp_value != 0xffu) {
 		//convert to ASCII and convert to binary

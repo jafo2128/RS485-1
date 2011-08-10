@@ -155,8 +155,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 				head= tail= 0; //reset buffer
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(STX, 1);
-				PIE1bits.TX1IE= 1; //Enable interrupts!
 				hdlc_sendbuffer(address, 0);
+				PIE1bits.TX1IE= 1; //Enable interrupts!
 				hdlc_sendbuffer(0xCE, 0); //UA
 					crc.Int= 0xffff;
 					crc.Int= crc_1021(crc.Int, address);
@@ -173,8 +173,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 				head= tail= 0; //reset buffer
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(STX, 1);
-				PIE1bits.TX1IE= 1; //Enable interrupts!
 				hdlc_sendbuffer(address, 0);
+				PIE1bits.TX1IE= 1; //Enable interrupts!
 				hdlc_sendbuffer(0xCE, 0); //UA
 					crc.Int= 0xffff;
 					crc.Int= crc_1021(crc.Int, address);
@@ -184,15 +184,17 @@ void hdlc_parseFrame() {  //What do I have to do?
 				hdlc_sendbuffer(DLE, 1);
 				hdlc_sendbuffer(ETX, 1);
 			}
-		} else if ((received_data[1]&0x37) == 0x06u) { //U-F, ACK
+		} else if ((received_data[1]&0x37) == 0x06u) { //UA
 			//Do nothing
+		} else if ((received_data[1]&0x37) == 0x21u) { //FRMR
+			//Do nothing	
 		} else if ( (received_data[1]&0x08) == 0x08u) { //Unknown, poll-flag, Frame reject
 			//Send FRMR
 			head= tail= 0;
 			hdlc_sendbuffer(DLE, 1);
 			hdlc_sendbuffer(STX, 1);
-			PIE1bits.TX1IE= 1; //Enable interrupts!
 			hdlc_sendbuffer(address, 0);
+			PIE1bits.TX1IE= 1; //Enable interrupts!
 			hdlc_sendbuffer(0xE9, 0); //FRMR
 				crc.Int= 0xffff;
 				crc.Int= crc_1021(crc.Int, address);
@@ -233,8 +235,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 					if ( (tmp_capt1= io_capt1()) > 0u) { //Send puls data => I-Frame
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
-						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						tmp= send_sequence_number<<4;
 						send_sequence_number++;
 						send_sequence_number&= 0x07;
@@ -254,8 +256,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 					} else if ((tmp_input.Int= io_getInputs()) > 0u) { //Send input data => I-frame
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
-						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						tmp= send_sequence_number<<4;
 						send_sequence_number++;
 						send_sequence_number&= 0x07;
@@ -277,8 +279,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 					} else { //No data => RR
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
-						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						tmp= 0x88|receive_sequence_number;
 						hdlc_sendbuffer(tmp, 0); //RR: no data to transmit
 							crc.Int= 0xffff;
@@ -302,8 +304,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 					if ( (tmp_capt1= io_capt1()) > 0u) { //Send puls data => I-Frame
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
-						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						tmp= send_sequence_number<<4;
 						send_sequence_number++;
 						send_sequence_number&= 0x07;
@@ -323,8 +325,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 					} else if ((tmp_input.Int= io_getInputs()) > 0u) { //Send input data => I-frame
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
-						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						tmp= send_sequence_number<<4;
 						send_sequence_number++;
 						send_sequence_number&= 0x07;
@@ -346,8 +348,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 					} else { //No data => RR
 						hdlc_sendbuffer(DLE, 1);
 						hdlc_sendbuffer(STX, 1);
-						PIE1bits.TX1IE= 1; //Enable interrupts!
 						hdlc_sendbuffer(address, 0);
+						PIE1bits.TX1IE= 1; //Enable interrupts!
 						tmp= 0x88|receive_sequence_number;
 						hdlc_sendbuffer(tmp, 0); //RR: no data to transmit
 							crc.Int= 0xffff;
@@ -371,8 +373,8 @@ void hdlc_parseFrame() {  //What do I have to do?
 			head= tail= 0;
 			hdlc_sendbuffer(DLE, 1);
 			hdlc_sendbuffer(STX, 1);
-			PIE1bits.TX1IE= 1; //Enable interrupts!
 			hdlc_sendbuffer(address, 0);
+			PIE1bits.TX1IE= 1; //Enable interrupts!
 			hdlc_sendbuffer(0xF8, 0); //DM
 				crc.Int= 0xffff;
 				crc.Int= crc_1021(crc.Int, address);

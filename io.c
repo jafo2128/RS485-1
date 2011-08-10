@@ -1,8 +1,8 @@
 #include "io.h"
 
 //Defines
-#define BTN_INC PORTCbits.RC0
-#define BTN_DEC PORTAbits.RA6
+#define BTN_DEC PORTCbits.RC0
+#define BTN_INC PORTAbits.RA6
 #define CAPT1	PORTCbits.RC1
 #define INPUT1	(PORTA&0b00111111)
 #define INPUT2	(PORTE&0b00000111)
@@ -176,9 +176,9 @@ unsigned int io_getInputs() {
 
 void io_enableOutput(char output) {
 	if (output == 1) {
-		LATB|=0x10;
-	} else if (output == 2) {
 		LATB|=0x20;
+	} else if (output == 2) {
+		LATB|=0x10;
 	}	
 }
 

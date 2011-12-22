@@ -12,15 +12,10 @@ unsigned char cnt_dec, cnt_inc, cnt_capt, cnt_input;
 unsigned int delay_off, delay_unlock;
 
 //Counter for input capture
-unsigned char capt1;
+unsigned int capt1;
 
 //The buttons who have been pressed
-//For int to char
-typedef union combo {
-	unsigned int Int;	   
-	unsigned char Char[2];	   
-} Tcombo;
-Tcombo inputs;
+unsigned char inputs;
 
 //Keeps the current status of the RS485 LED
 unsigned char rs485;
@@ -64,7 +59,7 @@ void io_init() {
 	input.btn_dec= input.btn_inc= input.btn_ignore= 0;
 	cnt_dec= cnt_inc= cnt_capt= cnt_input= delay_off= delay_unlock= 0;
 	capt1= 0;
-	inputs.Int= 0;
+	inputs= 0;
 	
 	//Init timer 2: 16MHz/4, prescaler 1:16. Used for debouncing
 	T2CON=  0b00000110;
@@ -119,17 +114,24 @@ void io_loop() {
 			input.btn_ignore= 1u;
 		}
 	}
-	//Input capture
+	//Input buttons
 	if ( input.input == 0u && (INPUT1 == 0u && INPUT2 == 0u) && cnt_input == 0u ) {
 		cnt_input= 100;
 		input.input= 1u;
 	} else if ( input.input == 1u && (INPUT1 != 0u || INPUT2 != 0u) && cnt_input == 0u ) {
 		cnt_input= 100;
 		input.input= 0u;
-		inputs.Char[0]=INPUT1;
-		inputs.Char[1]=INPUT2;
+		if (INPUT1&0x01) {inputs=9;}
+		if (INPUT1&0x02) {inputs=8;}
+		if (INPUT1&0x04) {inputs=7;}
+		if (INPUT1&0x08) {inputs=6;}
+		if (INPUT1&0x10) {inputs=5;}
+		if (INPUT1&0x20) {inputs=4;}
+		if (INPUT2&0x01) {inputs=3;}
+		if (INPUT2&0x02) {inputs=2;}
+		if (INPUT2&0x04) {inputs=1;}
 	}
-	//Input buttons
+	//Input capture
 	if ( CAPT1 == 1u && input.capt1 == 0u && cnt_capt == 0u ) {
 		cnt_capt= 100;
 		input.capt1= 1u;
@@ -161,16 +163,16 @@ void io_loop() {
 	}
 }
 
-unsigned char io_capt1() {
-	unsigned char tmp= capt1;
+unsigned int io_getCapt1() {
+	unsigned int tmp= capt1;
 	capt1=0;
 	return tmp;
 		
 }
 
-unsigned int io_getInputs() {
-	unsigned int tmp= inputs.Int;
-	inputs.Int= 0;
+unsigned char io_getInputs() {
+	unsigned char tmp= inputs;
+	inputs= 0;
 	return tmp;	
 }
 

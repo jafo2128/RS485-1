@@ -43,9 +43,9 @@ unsigned char head, tail;
 //Temp variable
 unsigned char tmp;
 //Temp variable for capt1
-unsigned char tmp_capt1;
+Tcombo tmp_capt1;
 //Temp variable for input
-Tcombo tmp_input;
+unsigned char tmp_input;
 
 Tcombo crc;
 
@@ -321,7 +321,7 @@ void hdlc_parseFrame() {  //What do I have to do?
 }
 
 void hdlc_sendData() {
-  if ( (tmp_capt1= io_capt1()) > 0u) { //Send puls data => I-Frame
+  if ( (tmp_capt1.Int= io_getCapt1()) > 0u) { //Send puls data => I-Frame
 		//Control field
 		tmp= send_sequence_number<<4;
 		send_sequence_number++;
@@ -333,19 +333,21 @@ void hdlc_sendData() {
 		crc.Int= 0xffff;
 		crc.Int= crc_1021(crc.Int, address);
 		crc.Int= crc_1021(crc.Int, tmp);
-		crc.Int= crc_1021(crc.Int, tmp_capt1);
+		crc.Int= crc_1021(crc.Int, tmp_capt1.Char[0]);
+		crc.Int= crc_1021(crc.Int, tmp_capt1.Char[1]);		
 		
 		hdlc_sendbuffer(DLE, 1);
 		hdlc_sendbuffer(STX, 1);
 		hdlc_sendbuffer(address, 0);
 		PIE1bits.TX1IE= 1; //Enable interrupts!
 		hdlc_sendbuffer(tmp, 0); //I-Frame
-		hdlc_sendbuffer(tmp_capt1, 0); //Data to transmit
+		hdlc_sendbuffer(tmp_capt1.Char[0], 0); //Data to transmit
+		hdlc_sendbuffer(tmp_capt1.Char[1], 0);		
 		hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
 		hdlc_sendbuffer(crc.Char[1], 0);
 		hdlc_sendbuffer(DLE, 1);
 		hdlc_sendbuffer(ETX, 1);
-	} else if ((tmp_input.Int= io_getInputs()) > 0u) { //Send input data => I-frame
+	} else if ((tmp_input= io_getInputs()) > 0u) { //Send input data => I-frame
 	  	//Control field
 	  	tmp= send_sequence_number<<4;
 		send_sequence_number++;
@@ -357,16 +359,14 @@ void hdlc_sendData() {
 	  	crc.Int= 0xffff;
 		crc.Int= crc_1021(crc.Int, address);
 		crc.Int= crc_1021(crc.Int, tmp);
-		crc.Int= crc_1021(crc.Int, tmp_input.Char[0]);
-		crc.Int= crc_1021(crc.Int, tmp_input.Char[1]);
+		crc.Int= crc_1021(crc.Int, tmp_input);
 				
 		hdlc_sendbuffer(DLE, 1);
 		hdlc_sendbuffer(STX, 1);
 		hdlc_sendbuffer(address, 0);
 		PIE1bits.TX1IE= 1; //Enable interrupts!
 		hdlc_sendbuffer(tmp, 0); //I-Frame
-		hdlc_sendbuffer(tmp_input.Char[0], 0); //Data to transmit
-		hdlc_sendbuffer(tmp_input.Char[1], 0);
+		hdlc_sendbuffer(tmp_input, 0); //Data to transmit
 		hdlc_sendbuffer(crc.Char[0], 0); //FCS!!
 		hdlc_sendbuffer(crc.Char[1], 0);
 		hdlc_sendbuffer(DLE, 1);
@@ -459,6 +459,6 @@ void hdlc_checkFrame() {
 	
 	//Calculate CRC
 	for (i=0; i <= received_size-2; i++) {
-		crc.Int= crc_1021(crc.Int, receiving_data[i]);
+		crc.Int= crc_1021(crc.Int, received_data[i]);
 	}	
 }

@@ -12,12 +12,11 @@ void io_init(void);
 void io_loop(void);
 void io_cnt_int(void);
 
-unsigned char io_capt1(void); //Get the number of times the pulse has changed
+unsigned int io_getCapt1(void); //Get the number of times the pulse has changed
+unsigned char io_getInputs(void); //Get the current status of the inputs
 
 void io_enableOutput(char output);
 void io_disableOutput(char output);
-
-unsigned int io_getInputs(void); //Get the current status of the inputs
 
 void io_control_rs485(char forme); //Control the status of the rs485 LED
 void io_control_rs485_reset(void); //Reset after address change

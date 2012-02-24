@@ -34,8 +34,15 @@ void main (void)
 	INTCONbits.PEIE= 1;
 	INTCONbits.GIE= 1;
 	
+	//Enable watchdog
+	#pragma config WDTEN = 2
+	#pragma config WDTPS= 0x02
+	//CONFIG2H|= 0x03; //Enabele WDT
+	//CONFIG2H|= 0x08; //Set postscaler to 1:4
+	
 	//Main loop	
 	while (1) {
+		CLRWDT();
 		io_loop();
 		while (PIR1bits.RC1IF) {
 			hdlc_receive(RCREG1);

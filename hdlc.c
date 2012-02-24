@@ -1,16 +1,21 @@
 #include "hdlc.h"
 
 //Define constants for  receiving & transmission
-const unsigned char DLE= 0x10;
-const unsigned char STX= 0x02;
-const unsigned char ETX= 0x03;
+//const unsigned char DLE= 0x10;
+//const unsigned char STX= 0x02;
+//const unsigned char ETX= 0x03;
+#define DLE 0x10u
+#define STX 0x02u
+#define ETX 0x03u
+#define MAX_FRAME_LENGTH 0x12u //Max length = 16 (data) + 2 ( DLE & ETX), normally never reached
+#define MIN_FRAME_LENGTH 0x05u //Min length= 1 (addres) + 2 (CRC) + 2 (DLE & ETX)
 
 //used as boolean
 typedef union {
 	unsigned char byte;
 	struct {
 		unsigned SYNC :1; // Found DLE/STX from start of fram
-		unsigned DLE :1;
+		unsigned DLE_found :1;
 		unsigned bit2 :1;
 		unsigned bit3 :1;
 		unsigned bit4 :1;
@@ -30,14 +35,14 @@ typedef union combo {
 //Receiving charters
 unsigned char current_size, received_size, cnt; //Counters
 unsigned char address;	//Address of slave
-unsigned char receiving_data[0x10]; //Buffer for receiving data
-unsigned char received_data[0x10]; //Same as receiving buffer, maybe remove??
+unsigned char receiving_data[MAX_FRAME_LENGTH+2]; //Buffer for receiving data
+unsigned char received_data[MAX_FRAME_LENGTH+2]; //Same as receiving buffer, maybe remove??
 
 //HDLC transmit/receive counter
 unsigned char send_sequence_number, receive_sequence_number; //3bit used!! Count to 7, 8 => 0!
 
 //Transmit buffer, and counters for position in buffer
-unsigned char transmit_buffer[0x20u];
+unsigned char transmit_buffer[MAX_FRAME_LENGTH];
 unsigned char head, tail;
 
 //Temp variable
@@ -395,46 +400,48 @@ void hdlc_sendData() {
 //If found, parse frame
 void hdlc_receive(unsigned char received_byte) {
 	//Drop data => to many packets! (Buffer overflow!)
-	if (current_size >= 0x10u) { //Max size = 16 + 2. (2 from DLE & STX)
+	if (current_size >= MAX_FRAME_LENGTH) { //Max size = 16 + 2. (2 from DLE & STX)
 		control.SYNC= 0u;
-		control.DLE= 0u;
+		control.DLE_found= 0u;
 		current_size= 0u;
 	}
 	
 	//Waiting on Start of frame: DLE & STX
 	if (control.SYNC == 0u) {
 		if (received_byte == DLE) {
-			control.DLE= 1u; //DLE found => next STX!
-		} else if (control.DLE == 1u && received_byte == STX) { //Start of frame found!
+			control.DLE_found= 1u; //DLE found => next STX!
+		} else if (control.DLE_found == 1u && received_byte == STX) { //Start of frame found!
 			control.SYNC= 1u;
-			control.DLE= 0u;
+			control.DLE_found= 0u;
 			current_size= 0u;
-		} else {control.DLE= 0u;} //Not a valid charter
+		} else {control.DLE_found= 0u;} //Not a valid charter
 	} else {
 		//Save all charters for CRC and handeling of commands
 		receiving_data[current_size]= received_byte;
 		current_size++;
 		
 		//End of frame found :):)
-		if (control.DLE == 1u && received_byte == ETX) {
-			received_size= current_size - 3; //Remove DLE & ETX, unneeded!
- 			if (receiving_data[0] == address) { //For this slave?
-				hdlc_checkFrame(); //Remove dupplicate DLE's and calculate CRC
-				if ( (received_data[received_size-1] == crc.Char[0]) && (received_data[received_size] == crc.Char[1]) ) {
-						hdlc_parseFrame(); //What do we have to do?
-					io_control_rs485(1); //Let the RS485-LED blink to show we are receiving data for this slave.
+		if (control.DLE_found == 1u && received_byte == ETX) {
+			if (current_size >= MIN_FRAME_LENGTH) {	
+				received_size= current_size - 3; //Remove DLE & ETX, unneeded!
+	 			if (receiving_data[0] == address) { //For this slave?
+					hdlc_checkFrame(); //Remove dupplicate DLE's and calculate CRC
+					if ( (received_data[received_size-1] == crc.Char[0]) && (received_data[received_size] == crc.Char[1]) ) {
+							hdlc_parseFrame(); //What do we have to do?
+						io_control_rs485(1); //Let the RS485-LED blink to show we are receiving data for this slave.
+					}
+				} else {
+	 				io_control_rs485(0); //Enable the RS485-LED to show we receive some data, but not for this slave.
 				}
-			} else {
- 				io_control_rs485(0); //Enable the RS485-LED to show we receive some data, but not for this slave.
 			}
 			control.SYNC= 0u; //We have to resync
-		} else if (control.DLE == 1u && received_byte == STX) { //Reset was invalid start of frame!
+		} else if (control.DLE_found == 1u && received_byte == STX) { //Reset was invalid start of frame!
 			current_size= 0u;
-			control.DLE= 0u;
+			control.DLE_found= 0u;
 		} if (received_byte == DLE) { //Toggle DLE status
-			control.DLE= !control.DLE;
+			control.DLE_found= !control.DLE_found;
 		} else {  //Incoming data != DLE => reset DLE status
-			control.DLE= 0u;
+			control.DLE_found= 0u;
 		}
 	}
 }

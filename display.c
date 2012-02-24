@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 //Private variable declaration
-unsigned char value, idle_timer, locked, status;
+unsigned char value, idle_timer, locked;
 char port;
 
 //For display
@@ -17,7 +17,6 @@ void display_init() {
 	value= hdlc_getAddress();
 	idle_timer= 0;
 	locked= 0xff;
-	status= 0x00;
 	
 	//Reset variables
 	buffer[0]= buffer[1]= buffer[2]= buffer[3]= 0;
@@ -54,28 +53,24 @@ void display_show(unsigned char disp_value) {
 }
 
 void display_lock() {
-	if (status == 0xffu)	{
-		locked= 0xff;
-		status= 0x00;
-		
-		//Everything above 9 = off.
-		display_show(255);
-		
-		//Write new address to EEPROM, only if changed
-		if (value != hdlc_getAddress()) {
-			io_control_rs485_reset();
-			hdlc_setAddress(value);
-		}
-	}	
+	locked= 0xffu;
+	
+	//Everything above 9 = off.
+	display_show(255);
+	
+	//Write new address to EEPROM, only if changed
+	if (value != hdlc_getAddress()) {
+		io_control_rs485_reset();
+		hdlc_setAddress(value);
+	}
 }
 	
 void display_unlock() {
-	locked= 0x00;
+	locked= 0x00u;
 }
 
 void display_on() {
 	display_show(value);
-	status= 0xff;
 }	
 
 void display_inc() {

@@ -12,7 +12,7 @@ unsigned char cnt_dec, cnt_inc, cnt_capt, cnt_input;
 unsigned int delay_off, delay_unlock;
 
 //Counter for input capture
-unsigned int capt1;
+unsigned int puls_counter;
 
 //The buttons who have been pressed
 unsigned char inputs;
@@ -20,21 +20,11 @@ unsigned char inputs;
 //Keeps the current status of the RS485 LED
 unsigned char rs485;
 
-typedef union {
-	unsigned char byte;
-	struct {
-		unsigned btn_inc :1;
-		unsigned btn_dec :1;
-		unsigned capt1 :1;
-		unsigned btn_ignore :1;
-		unsigned input :1;
-		unsigned bit5 :1;
-		unsigned bit6 :1;
-		unsigned bit7 :1;
-	};
-} bits;
-
-bits input;
+bit old_btn_inc= 0;
+bit old_btn_dec= 0;
+bit capt1= 0;
+bit btn_ignore=0 ;
+bit buttons_input= 0;
 
 void io_init() {
 	
@@ -56,10 +46,9 @@ void io_init() {
 	LATB&=0b11001111;	 //Disable output
 	
 	//Set default values
-	input.btn_dec= input.btn_inc= input.btn_ignore= 0;
+	buttons_input= old_btn_dec= old_btn_inc= btn_ignore= 0;
 	cnt_dec= cnt_inc= cnt_capt= cnt_input= delay_off= delay_unlock= 0;
 	capt1= 0;
-	inputs= 0;
 	
 	//Init timer 2: 16MHz/4, prescaler 1:16. Used for debouncing
 	T2CON=  0b00000110;
@@ -77,50 +66,51 @@ void io_init() {
 void io_loop() {
 	
 	//Button decrement
-	if ( BTN_DEC == 1u && input.btn_dec == 0u && cnt_dec == 0u ) {
+	if ( BTN_DEC == 1u && old_btn_dec == 0u && cnt_dec == 0u ) {
 		cnt_dec= 100;
-		input.btn_dec= 1u;
+		old_btn_dec= 1u;
 		display_on(); //Show current address
-	} else 	if ( BTN_DEC == 0u && input.btn_dec == 1u && cnt_dec == 0u ) {
+	} else 	if ( BTN_DEC == 0u && old_btn_dec == 1u && cnt_dec == 0u ) {
 		cnt_dec= 100;
-		input.btn_dec= 0u;
+		old_btn_dec= 0u;
 		delay_unlock= 0u; //Reset unlocking time
 		
-		if (input.btn_inc == 0u) {
-			if (!input.btn_ignore) {
+		if (old_btn_inc == 0u) {
+			if (!btn_ignore) {
 				display_dec();
 			}
-			input.btn_ignore= 0u;
+			btn_ignore= 0u;
 		} else {
-			input.btn_ignore= 1u;
+			btn_ignore= 1u;
 		}
 	}
 	//Button increment
-	if ( BTN_INC == 1u && input.btn_inc == 0u && cnt_inc == 0u ) {
+	if ( BTN_INC == 1u && old_btn_inc == 0u && cnt_inc == 0u ) {
 		cnt_inc= 100;
-		input.btn_inc= 1u;
+		old_btn_inc= 1u;
 		display_on(); //Show current address
-	} else if ( BTN_INC == 0u && input.btn_inc == 1u && cnt_inc == 0u ) {
+	} else if ( BTN_INC == 0u && old_btn_inc == 1u && cnt_inc == 0u ) {
 		cnt_inc= 100;
-		input.btn_inc= 0u;
+		old_btn_inc= 0u;
 		delay_unlock= 0u; //Reset unlocking time
 		
-		if (input.btn_dec == 0u) {
-			if (!input.btn_ignore) {
+		if (old_btn_dec == 0u) {
+			if (!btn_ignore) {
 				display_inc();
 			}
-			input.btn_ignore= 0u;
+			btn_ignore= 0u;
 		} else {
-			input.btn_ignore= 1u;
+			btn_ignore= 1u;
 		}
 	}
+	
 	//Input buttons
-	if ( input.input == 0u && (INPUT1 == 0u && INPUT2 == 0u) && cnt_input == 0u ) {
+	if ( buttons_input == 0u && (INPUT1 == 0u && INPUT2 == 0u) && cnt_input == 0u ) {
 		cnt_input= 100;
-		input.input= 1u;
-	} else if ( input.input == 1u && (INPUT1 != 0u || INPUT2 != 0u) && cnt_input == 0u ) {
+		buttons_input= 1u;
+	} else if (buttons_input == 1u && (INPUT1 != 0u || INPUT2 != 0u) && cnt_input == 0u ) {
 		cnt_input= 100;
-		input.input= 0u;
+		buttons_input= 0u;
 		if (INPUT1&0x01) {inputs=9;}
 		if (INPUT1&0x02) {inputs=8;}
 		if (INPUT1&0x04) {inputs=7;}
@@ -132,13 +122,13 @@ void io_loop() {
 		if (INPUT2&0x04) {inputs=1;}
 	}
 	//Input capture
-	if ( CAPT1 == 1u && input.capt1 == 0u && cnt_capt == 0u ) {
+	if ( CAPT1 == 1u && capt1 == 0u && cnt_capt == 0u ) {
 		cnt_capt= 100;
-		input.capt1= 1u;
-	} else if ( CAPT1 == 0u && input.capt1 == 1u && cnt_capt == 0u ) {
+		capt1= 1;
+	} else if ( CAPT1 == 0u && capt1 == 1u && cnt_capt == 0u ) {
 		cnt_capt= 100;
-		input.capt1= 0u;
-		capt1++;
+		capt1= 0;
+		puls_counter++;
 	}
 	//both switches pressed
 	if ( BTN_INC != 0u && BTN_DEC != 0u ) {
@@ -164,8 +154,8 @@ void io_loop() {
 }
 
 unsigned int io_getCapt1() {
-	unsigned int tmp= capt1;
-	capt1=0;
+	unsigned int tmp= puls_counter;
+	puls_counter=0;
 	return tmp;
 		
 }

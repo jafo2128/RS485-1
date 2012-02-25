@@ -1,14 +1,11 @@
 #include "hdlc.h"
 
 //Define constants for  receiving & transmission
-//const unsigned char DLE= 0x10;
-//const unsigned char STX= 0x02;
-//const unsigned char ETX= 0x03;
 #define DLE 0x10u
 #define STX 0x02u
 #define ETX 0x03u
-#define MAX_FRAME_LENGTH 0x12u //Max length = 16 (data) + 2 ( DLE & ETX), normally never reached
-#define MIN_FRAME_LENGTH 0x05u //Min length= 1 (addres) + 2 (CRC) + 2 (DLE & ETX)
+#define MAX_FRAME_LENGTH 0x12u //Max length = 2 ( DLE & STX) + 14 (data) + 2 ( DLE & ETX), normally never reached
+#define MIN_FRAME_LENGTH 0x04u //Min length= 1 (addres) + 1 (status) + 2 (CRC)
 
 //used as boolean
 typedef union {
@@ -422,17 +419,15 @@ void hdlc_receive(unsigned char received_byte) {
 		
 		//End of frame found :):)
 		if (control.DLE_found == 1u && received_byte == ETX) {
-			if (current_size >= MIN_FRAME_LENGTH) {	
-				received_size= current_size - 3; //Remove DLE & ETX, unneeded!
-	 			if (receiving_data[0] == address) { //For this slave?
-					hdlc_checkFrame(); //Remove dupplicate DLE's and calculate CRC
-					if ( (received_data[received_size-1] == crc.Char[0]) && (received_data[received_size] == crc.Char[1]) ) {
-							hdlc_parseFrame(); //What do we have to do?
-						io_control_rs485(1); //Let the RS485-LED blink to show we are receiving data for this slave.
-					}
-				} else {
-	 				io_control_rs485(0); //Enable the RS485-LED to show we receive some data, but not for this slave.
+			received_size= current_size - 3; //Remove DLE & ETX, unneeded!
+	 		if (receiving_data[0] == address && received_size >= MIN_FRAME_LENGTH) { //For this slave && min size valid?
+				hdlc_checkFrame(); //Remove dupplicate DLE's and calculate CRC
+				if ( (received_data[received_size-1] == crc.Char[0]) && (received_data[received_size] == crc.Char[1]) ) {
+					hdlc_parseFrame(); //What do we have to do?
+					io_control_rs485(1); //Let the RS485-LED blink to show we are receiving data for this slave.
 				}
+			} else {
+	 			io_control_rs485(0); //Enable the RS485-LED to show we receive some data, but not for this slave.
 			}
 			control.SYNC= 0u; //We have to resync
 		} else if (control.DLE_found == 1u && received_byte == STX) { //Reset was invalid start of frame!
